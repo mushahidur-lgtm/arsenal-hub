@@ -43,7 +43,7 @@ const CORS_PROXIES = [
   (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
 ];
 
-const C = { red: "#EF0107", navy: "#063672", gold: "#9C824A" };
+const C = { red: "var(--ars-red)", navy: "var(--ars-navy)", gold: "var(--ars-gold)" };
 
 /* ────────────────────────────── Fetching ────────────────────────────── */
 
@@ -407,7 +407,7 @@ const cx = (...c) => c.filter(Boolean).join(" ");
 
 function Card({ className, children }) {
   return (
-    <section className={cx("rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900", className)}>
+    <section className={cx("rounded-2xl border border-line bg-surface text-ink shadow-lg shadow-black/15", className)}>
       {children}
     </section>
   );
@@ -415,16 +415,16 @@ function Card({ className, children }) {
 
 function CardHeader({ icon: Icon, title, action, sub }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+    <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
       <div className="flex min-w-0 items-center gap-2">
         {Icon && (
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[#EF0107]/10 text-[#EF0107]">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand/10 text-accent">
             <Icon size={16} />
           </span>
         )}
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-bold uppercase tracking-wide">{title}</h2>
-          {sub && <p className="truncate text-xs text-slate-500 dark:text-slate-400">{sub}</p>}
+          <h2 className="truncate text-sm uppercase">{title}</h2>
+          {sub && <p className="truncate text-xs text-ink-muted">{sub}</p>}
         </div>
       </div>
       {action}
@@ -432,7 +432,7 @@ function CardHeader({ icon: Icon, title, action, sub }) {
   );
 }
 
-const Skel = ({ className }) => <div className={cx("animate-pulse rounded-md bg-slate-200 dark:bg-slate-800", className)} />;
+const Skel = ({ className }) => <div className={cx("animate-pulse rounded-md bg-surface-2", className)} />;
 
 function SkeletonRows({ rows = 4, avatar = true }) {
   return (
@@ -469,11 +469,11 @@ function ErrorState({ message, onRetry, compact }) {
     <div className={cx("flex flex-col items-center justify-center gap-2 text-center", compact ? "p-4" : "p-8")}>
       <AlertTriangle className="text-amber-500" size={compact ? 20 : 28} />
       <p className="text-sm font-medium">Couldn’t load live data</p>
-      <p className="max-w-sm text-xs text-slate-500 dark:text-slate-400">{message}</p>
+      <p className="max-w-sm text-xs text-ink-muted">{message}</p>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-[#063672] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#063672]/90"
+          className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-navy px-3 py-1.5 text-xs text-white hover:bg-navy/90"
         >
           <RefreshCw size={12} /> Retry
         </button>
@@ -485,7 +485,7 @@ function ErrorState({ message, onRetry, compact }) {
 function StaleBanner({ source, onRetry }) {
   if (source.status !== "error" || !source.data) return null;
   return (
-    <div className="flex items-center justify-between gap-2 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+    <div className="flex items-center justify-between gap-2 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
       <span className="flex items-center gap-1.5"><AlertTriangle size={12} /> Refresh failed ({source.error}). Showing last loaded data.</span>
       <button onClick={onRetry} className="font-semibold underline">Retry</button>
     </div>
@@ -509,7 +509,7 @@ function Crest({ src, alt, className = "h-8 w-8" }) {
   const [broken, setBroken] = useState(false);
   if (!src || broken)
     return (
-      <span className={cx("grid place-items-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-500 dark:bg-slate-700", className)}>
+      <span className={cx("grid place-items-center rounded-full bg-surface-2 text-[10px] font-bold text-ink-muted", className)}>
         {(alt || "?").slice(0, 3).toUpperCase()}
       </span>
     );
@@ -517,21 +517,21 @@ function Crest({ src, alt, className = "h-8 w-8" }) {
 }
 
 const RESULT_STYLE = {
-  W: "bg-emerald-500 text-white",
-  D: "bg-slate-400 text-white dark:bg-slate-500",
-  L: "bg-[#EF0107] text-white",
+  W: "bg-emerald-700 text-white",
+  D: "bg-zinc-500 text-white",
+  L: "bg-brand text-white",
 };
 
 function ResultPill({ r, className = "h-6 w-6 text-xs" }) {
-  return <span className={cx("grid shrink-0 place-items-center rounded-md font-bold", RESULT_STYLE[r] ?? "bg-slate-200", className)}>{r ?? "–"}</span>;
+  return <span className={cx("grid shrink-0 place-items-center rounded-md font-bold", RESULT_STYLE[r] ?? "bg-surface-2", className)}>{r ?? "–"}</span>;
 }
 
 function CompBadge({ comp }) {
   const ucl = /champions/i.test(comp);
   return (
     <span className={cx(
-      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-      ucl ? "bg-[#063672]/10 text-[#063672] dark:bg-sky-400/10 dark:text-sky-300" : "bg-[#9C824A]/15 text-[#7a6436] dark:text-[#d2b67a]"
+      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
+      ucl ? "bg-navy/10 text-navy-ink dark:bg-sky-400/10" : "bg-gold/15 text-gold-ink"
     )}>
       {comp}
     </span>
@@ -559,8 +559,8 @@ function useCountdown(target) {
 function CountdownBox({ value, label }) {
   return (
     <div className="flex min-w-[3.75rem] flex-col items-center rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/15 backdrop-blur sm:min-w-[4.5rem]">
-      <span className="text-2xl font-black tabular-nums sm:text-3xl">{String(value).padStart(2, "0")}</span>
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-white/70">{label}</span>
+      <span className="font-display text-2xl font-extrabold tabular-nums sm:text-3xl">{String(value).padStart(2, "0")}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-widest text-white/80">{label}</span>
     </div>
   );
 }
@@ -578,9 +578,9 @@ function HeroTeam({ side, align }) {
 
 function HeroMatch({ source, onRetry }) {
   const shell = (children) => (
-    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#063672] via-[#0b2a5c] to-[#8a0005] text-white shadow-xl">
-      <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-[#EF0107]/30 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-[#9C824A]/25 blur-3xl" />
+    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-navy via-navy to-crimson text-white shadow-2xl shadow-black/30 ring-1 ring-white/10">
+      <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand-bright/30 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-gold/25 blur-3xl" />
       <div className="relative">{children}</div>
     </div>
   );
@@ -631,22 +631,22 @@ function HeroBody({ match }) {
     <div className="flex flex-col items-center gap-5">
       <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-semibold uppercase tracking-widest">
         {isLive ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EF0107] px-3 py-1">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1">
             <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> Live · {match.clock || match.statusDetail}
           </span>
         ) : (
           <span className="rounded-full bg-white/15 px-3 py-1">Next match</span>
         )}
-        <span className="rounded-full bg-[#9C824A] px-3 py-1">{match.competition}</span>
+        <span className="rounded-full bg-gold-deep px-3 py-1">{match.competition}</span>
       </div>
 
       <div className="flex w-full max-w-xl items-center gap-3">
         <HeroTeam side={match.home} />
         <div className="flex shrink-0 flex-col items-center">
           {isLive ? (
-            <span className="text-4xl font-black tabular-nums sm:text-5xl">{match.home.score ?? 0}–{match.away.score ?? 0}</span>
+            <span className="font-display text-4xl font-extrabold tabular-nums sm:text-5xl">{match.home.score ?? 0}–{match.away.score ?? 0}</span>
           ) : (
-            <span className="text-2xl font-black text-white/60 sm:text-3xl">VS</span>
+            <span className="font-display text-2xl font-extrabold text-white/70 sm:text-3xl">VS</span>
           )}
         </div>
         <HeroTeam side={match.away} />
@@ -654,7 +654,7 @@ function HeroBody({ match }) {
 
       {!isLive && (
         cd.done ? (
-          <p className="text-sm font-semibold text-[#d2b67a]">Kick-off imminent — refresh for live score</p>
+          <p className="text-sm font-semibold text-gold-light">Kick-off imminent — refresh for live score</p>
         ) : (
           <div className="flex gap-2 sm:gap-3" aria-label="Countdown to kick-off">
             <CountdownBox value={cd.d} label="Days" />
@@ -669,7 +669,7 @@ function HeroBody({ match }) {
         <span className="inline-flex items-center gap-1.5"><CalendarDays size={14} /> {fmtKick(match.date)} {tzShort(match.date)}</span>
         {match.venue && <span className="inline-flex items-center gap-1.5"><MapPin size={14} /> {match.venue}{match.city ? `, ${match.city}` : ""}</span>}
       </div>
-      <p className="text-[11px] text-white/50">Times shown in your timezone ({userTz})</p>
+      <p className="text-[11px] text-white/75">Times shown in your timezone ({userTz})</p>
     </div>
   );
 }
@@ -677,7 +677,7 @@ function HeroBody({ match }) {
 function HeroNoFixture({ last }) {
   return (
     <div className="flex flex-col items-center gap-3 py-4 text-center">
-      <Trophy className="text-[#d2b67a]" />
+      <Trophy className="text-gold-light" />
       <p className="text-lg font-bold">No upcoming fixtures announced yet</p>
       {last && (
         <p className="text-sm text-white/80">
@@ -693,12 +693,12 @@ function HeroNoFixture({ last }) {
 function MatchRow({ m }) {
   const done = m.state === "post";
   return (
-    <li className="flex items-center gap-3 px-4 py-3 transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
+    <li className="flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2">
       {done ? (
         <ResultPill r={m.result} />
       ) : (
         <span className={cx("grid h-6 w-6 shrink-0 place-items-center rounded-md text-[10px] font-bold",
-          m.isHome ? "bg-[#063672] text-white" : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200")}
+          m.isHome ? "bg-navy text-white" : "bg-surface-2 text-ink-muted")}
           title={m.isHome ? "Home" : "Away"}>
           {m.isHome ? "H" : "A"}
         </span>
@@ -708,7 +708,7 @@ function MatchRow({ m }) {
         <p className="truncate text-sm font-semibold">
           {m.isHome ? "vs" : "@"} {m.opp?.name}
         </p>
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
           <CompBadge comp={m.competition} />
           <span>{fmtDay(m.date)}{!done && ` · ${fmtTime(m.date)}`}</span>
           {m.venue && <span className="hidden truncate sm:inline">· {m.venue}</span>}
@@ -716,15 +716,15 @@ function MatchRow({ m }) {
       </div>
       <div className="shrink-0 text-right">
         {done ? (
-          <span className="text-lg font-black tabular-nums">
-            {m.ars?.score}<span className="text-slate-400">–</span>{m.opp?.score}
+          <span className="font-display text-lg font-extrabold tabular-nums">
+            {m.ars?.score}<span className="text-ink-muted">–</span>{m.opp?.score}
           </span>
         ) : m.state === "in" ? (
-          <span className="rounded bg-[#EF0107] px-1.5 py-0.5 text-xs font-bold text-white">LIVE {m.ars?.score}-{m.opp?.score}</span>
+          <span className="rounded bg-brand px-1.5 py-0.5 text-xs font-bold text-white">LIVE {m.ars?.score}-{m.opp?.score}</span>
         ) : m.postponed ? (
-          <span className="text-xs font-semibold text-amber-600">Postponed</span>
+          <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Postponed</span>
         ) : (
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{tzShort(m.date)}</span>
+          <span className="text-xs font-medium text-ink-muted">{tzShort(m.date)}</span>
         )}
       </div>
     </li>
@@ -739,10 +739,10 @@ function FixturesCard({ source, onRetry, limit, defaultView = "upcoming", classN
         icon={CalendarDays}
         title="Fixtures & Results"
         action={
-          <div className="flex rounded-full bg-slate-100 p-0.5 text-xs font-semibold dark:bg-slate-800">
+          <div className="flex rounded-full bg-surface-2 p-0.5 text-xs">
             {[["upcoming", "Upcoming"], ["results", "Results"]].map(([k, l]) => (
               <button key={k} onClick={() => setView(k)}
-                className={cx("rounded-full px-3 py-1 transition", view === k ? "bg-white text-[#EF0107] shadow dark:bg-slate-700 dark:text-white" : "text-slate-500")}>
+                className={cx("rounded-full px-3 py-1 transition", view === k ? "bg-surface text-accent shadow" : "text-ink-muted")}>
                 {l}
               </button>
             ))}
@@ -753,9 +753,9 @@ function FixturesCard({ source, onRetry, limit, defaultView = "upcoming", classN
         {({ fixtures, results }) => {
           const list = (view === "upcoming" ? fixtures : results).slice(0, limit ?? undefined);
           return list.length ? (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">{list.map((m) => <MatchRow key={m.id} m={m} />)}</ul>
+            <ul className="divide-y divide-line">{list.map((m) => <MatchRow key={m.id} m={m} />)}</ul>
           ) : (
-            <p className="p-6 text-center text-sm text-slate-500">No {view === "upcoming" ? "upcoming fixtures" : "results"} yet.</p>
+            <p className="p-6 text-center text-sm text-ink-muted">No {view === "upcoming" ? "upcoming fixtures" : "results"} yet.</p>
           );
         }}
       </SourceGate>
@@ -779,17 +779,17 @@ function FormStrip({ results, n = 5 }) {
 /* ────────────────────────────── News ────────────────────────────── */
 
 const SOURCE_STYLE = {
-  Arseblog: "bg-[#EF0107] text-white",
-  "r/Gunners": "bg-orange-500 text-white",
-  ESPN: "bg-slate-800 text-white dark:bg-slate-600",
+  Arseblog: "bg-brand text-white",
+  "r/Gunners": "bg-orange-700 text-white",
+  ESPN: "bg-zinc-800 text-white dark:bg-zinc-600",
   "Premier League": "bg-[#3d195b] text-white",
-  "Champions League": "bg-[#063672] text-white",
+  "Champions League": "bg-navy text-white",
 };
 
 function NewsImage({ src, alt, video }) {
   const [broken, setBroken] = useState(false);
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-gradient-to-br from-[#063672] to-[#EF0107]">
+    <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-gradient-to-br from-navy to-brand">
       {src && !broken ? (
         <img src={src} alt={alt} loading="lazy" onError={() => setBroken(true)}
           className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
@@ -807,8 +807,8 @@ function NewsImage({ src, alt, video }) {
 
 function NewsCard({ item, layout = "grid" }) {
   const meta = (
-    <p className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-      <span className={cx("rounded px-1.5 py-0.5 text-[10px] font-bold", SOURCE_STYLE[item.source] ?? "bg-slate-200")}>{item.source}</span>
+    <p className="flex items-center gap-2 text-[11px] text-ink-muted">
+      <span className={cx("rounded px-1.5 py-0.5 text-[10px] font-bold", SOURCE_STYLE[item.source] ?? "bg-surface-2")}>{item.source}</span>
       <span>{timeAgo(item.date)}</span>
       <ExternalLink size={11} className="ml-auto opacity-0 transition group-hover:opacity-100" />
     </p>
@@ -816,10 +816,10 @@ function NewsCard({ item, layout = "grid" }) {
   if (layout === "list")
     return (
       <a href={item.link} target="_blank" rel="noopener noreferrer"
-        className="group flex gap-3 px-4 py-3 transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
+        className="group flex gap-3 px-4 py-3 transition hover:bg-surface-2">
         <div className="w-24 shrink-0 sm:w-28"><NewsImage src={item.image} alt="" video={item.video} /></div>
         <div className="min-w-0 flex-1 space-y-1">
-          <h3 className="line-clamp-2 text-sm font-semibold leading-snug group-hover:text-[#EF0107]">{item.title}</h3>
+          <h3 className="line-clamp-2 text-sm font-bold leading-snug group-hover:text-accent">{item.title}</h3>
           {meta}
         </div>
       </a>
@@ -827,8 +827,8 @@ function NewsCard({ item, layout = "grid" }) {
   return (
     <a href={item.link} target="_blank" rel="noopener noreferrer" className="group flex flex-col gap-2">
       <NewsImage src={item.image} alt="" video={item.video} />
-      <h3 className="line-clamp-2 text-sm font-semibold leading-snug group-hover:text-[#EF0107]">{item.title}</h3>
-      {item.excerpt && <p className="line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{item.excerpt}</p>}
+      <h3 className="line-clamp-2 text-sm font-bold leading-snug group-hover:text-accent">{item.title}</h3>
+      {item.excerpt && <p className="line-clamp-2 text-xs text-ink-muted">{item.excerpt}</p>}
       {meta}
     </a>
   );
@@ -837,7 +837,7 @@ function NewsCard({ item, layout = "grid" }) {
 function SourceWarnings({ warnings }) {
   if (!warnings?.length) return null;
   return (
-    <p className="flex items-start gap-1.5 px-4 pt-3 text-[11px] text-amber-700 dark:text-amber-400">
+    <p className="flex items-start gap-1.5 px-4 pt-3 text-[11px] text-amber-800 dark:text-amber-300">
       <AlertTriangle size={12} className="mt-px shrink-0" />
       Some feeds unavailable — {warnings.join(" · ")}
     </p>
@@ -855,8 +855,8 @@ function NewsCard2({ title, icon, source, onRetry, limit, layout = "grid", sub, 
           <div className="no-scrollbar flex gap-1 overflow-x-auto">
             {tags.map((t) => (
               <button key={t} onClick={() => setFilter(t)}
-                className={cx("whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold transition",
-                  filter === t ? "bg-[#063672] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300")}>
+                className={cx("whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] transition",
+                  filter === t ? "bg-navy text-white" : "bg-surface-2 text-ink-muted hover:bg-line")}>
                 {t}
               </button>
             ))}
@@ -873,7 +873,7 @@ function NewsCard2({ title, icon, source, onRetry, limit, layout = "grid", sub, 
               {layout === "grid" ? (
                 <div className="grid gap-5 p-4 sm:grid-cols-2 xl:grid-cols-3">{list.map((n) => <NewsCard key={n.id} item={n} />)}</div>
               ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-800">{list.map((n) => <NewsCard key={n.id} item={n} layout="list" />)}</div>
+                <div className="divide-y divide-line">{list.map((n) => <NewsCard key={n.id} item={n} layout="list" />)}</div>
               )}
             </>
           );
@@ -888,19 +888,19 @@ function NewsCard2({ title, icon, source, onRetry, limit, layout = "grid", sub, 
 const AVAIL_STYLE = {
   available: { dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" },
   doubtful: { dot: "bg-amber-500", chip: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" },
-  injured: { dot: "bg-[#EF0107]", chip: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300" },
+  injured: { dot: "bg-brand", chip: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300" },
 };
 
 function PlayerAvatar({ p, className = "h-14 w-14" }) {
   const [broken, setBroken] = useState(false);
   const initials = p.name.split(" ").map((x) => x[0]).slice(0, 2).join("");
   return (
-    <div className={cx("relative shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-[#EF0107] to-[#063672] ring-2 ring-white dark:ring-slate-900", className)}>
+    <div className={cx("relative shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-brand to-navy ring-2 ring-surface", className)}>
       {/* Initials always render underneath; the photo covers them only once it loads. */}
       <span className="absolute inset-0 grid place-items-center text-sm font-bold text-white">{initials}</span>
       {!broken && (
         <img src={p.photo} alt={p.name} loading="lazy" onError={() => setBroken(true)}
-          className="relative h-full w-full bg-slate-100 object-cover object-top opacity-0 transition-opacity dark:bg-slate-800"
+          className="relative h-full w-full bg-surface-2 object-cover object-top opacity-0 transition-opacity"
           onLoad={(e) => e.currentTarget.classList.replace("opacity-0", "opacity-100")} />
       )}
     </div>
@@ -915,14 +915,14 @@ function PlayerCard({ p }) {
     : [["Apps", st.appearances], ["G", st.totalGoals], ["A", st.goalAssists]];
   return (
     <a href={p.link} target="_blank" rel="noopener noreferrer"
-      className="group relative flex items-center gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 transition hover:-translate-y-0.5 hover:border-[#EF0107]/40 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-      <span className="pointer-events-none absolute -right-1 -top-3 text-6xl font-black text-slate-100 dark:text-slate-800/70">{p.jersey}</span>
+      className="group relative flex items-center gap-3 overflow-hidden rounded-xl border border-line bg-surface p-3 transition hover:-translate-y-0.5 hover:border-gold hover:shadow-md">
+      <span className="pointer-events-none absolute -right-1 -top-3 font-display text-6xl font-extrabold text-surface-2">{p.jersey}</span>
       <PlayerAvatar p={p} />
       <div className="relative min-w-0 flex-1">
         <p className="flex items-center gap-1.5 truncate text-sm font-bold">
-          <span className="text-[#EF0107]">{p.jersey}</span> {p.name}
+          <span className="text-accent">{p.jersey}</span> {p.name}
         </p>
-        <p className="flex items-center gap-1.5 truncate text-xs text-slate-500 dark:text-slate-400">
+        <p className="flex items-center gap-1.5 truncate text-xs text-ink-muted">
           {p.flag && <img src={p.flag} alt="" className="h-3 w-4 rounded-sm object-cover" loading="lazy" />}
           {p.position}{p.age ? ` · ${p.age}` : ""}
         </p>
@@ -931,7 +931,7 @@ function PlayerCard({ p }) {
             <span className={cx("h-1.5 w-1.5 rounded-full", a.dot)} />
             {p.availability.label}{p.availability.detail ? ` · ${p.availability.detail}` : ""}
           </span>
-          <span className="text-[10px] text-slate-400 tabular-nums">
+          <span className="text-[10px] text-ink-muted tabular-nums">
             {line.map(([k, v]) => `${k} ${v ?? 0}`).join(" · ")}
           </span>
         </div>
@@ -961,8 +961,8 @@ function SquadSection({ source, onRetry }) {
                 <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
                   {["All", ...GROUPS].map((g) => (
                     <button key={g} onClick={() => setPos(g)}
-                      className={cx("whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition",
-                        pos === g ? "bg-[#EF0107] text-white shadow" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300")}>
+                      className={cx("whitespace-nowrap rounded-full px-3 py-1.5 text-xs transition",
+                        pos === g ? "bg-brand text-white shadow" : "bg-surface-2 text-ink-muted hover:bg-line")}>
                       {g} <span className="opacity-70">{g === "All" ? players.length : players.filter((p) => p.group === g).length}</span>
                     </button>
                   ))}
@@ -970,8 +970,8 @@ function SquadSection({ source, onRetry }) {
                 <div className="flex gap-1.5 text-xs">
                   {[["all", "All"], ["available", "Available"], ["doubtful", "Doubtful"], ["injured", "Out"]].map(([k, l]) => (
                     <button key={k} onClick={() => setAvail(k)}
-                      className={cx("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 font-semibold transition",
-                        avail === k ? "border-[#063672] bg-[#063672] text-white" : "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300")}>
+                      className={cx("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 transition",
+                        avail === k ? "border-navy bg-navy text-white" : "border-line text-ink-muted")}>
                       {k !== "all" && <span className={cx("h-1.5 w-1.5 rounded-full", AVAIL_STYLE[k].dot)} />}
                       {l} {k !== "all" && <span className="opacity-70">{counts[k] ?? 0}</span>}
                     </button>
@@ -983,14 +983,14 @@ function SquadSection({ source, onRetry }) {
                 if (!list.length) return null;
                 return (
                   <div key={g}>
-                    <h3 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#9C824A]">
-                      {g} <span className="h-px flex-1 bg-[#9C824A]/30" />
+                    <h3 className="mb-2 flex items-center gap-2 text-xs uppercase tracking-widest text-gold-ink">
+                      {g} <span className="h-px flex-1 bg-gold/40" />
                     </h3>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{list.map((p) => <PlayerCard key={p.id} p={p} />)}</div>
                   </div>
                 );
               })}
-              {!filtered.length && <p className="py-6 text-center text-sm text-slate-500">No players match these filters.</p>}
+              {!filtered.length && <p className="py-6 text-center text-sm text-ink-muted">No players match these filters.</p>}
             </div>
           );
         }}
@@ -1009,7 +1009,7 @@ function StandingsTable({ source, onRetry, compact, className }) {
     <Card className={className}>
       <CardHeader icon={Trophy} title="Premier League Table" sub={source.data?.season}
         action={compact !== undefined && source.data && (
-          <button onClick={() => setFull((f) => !f)} className="text-xs font-semibold text-[#EF0107] hover:underline">
+          <button onClick={() => setFull((f) => !f)} className="text-xs text-accent hover:underline">
             {full ? "Around Arsenal" : "Full table"}
           </button>
         )}
@@ -1026,7 +1026,7 @@ function StandingsTable({ source, onRetry, compact, className }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-[11px] uppercase tracking-wide text-slate-400">
+                  <tr className="text-[11px] uppercase text-ink-muted">
                     <th className="py-2 pl-4 text-left font-semibold">#</th>
                     <th className="py-2 text-left font-semibold">Club</th>
                     <th className="px-1.5 py-2 text-center font-semibold">P</th>
@@ -1041,8 +1041,8 @@ function StandingsTable({ source, onRetry, compact, className }) {
                   {shown.map((r) => {
                     const ars = r.id === TEAM_ID;
                     return (
-                      <tr key={r.id} className={cx("border-t border-slate-100 dark:border-slate-800",
-                        ars && "bg-[#EF0107]/10 font-bold dark:bg-[#EF0107]/20")}>
+                      <tr key={r.id} className={cx("border-t border-line",
+                        ars && "bg-brand font-bold text-white")}>
                         <td className="relative py-2 pl-4 tabular-nums">
                           {r.note && <span className="absolute left-0 top-1 bottom-1 w-1 rounded-r" style={{ background: r.note.color }} title={r.note.label} />}
                           {r.rank}
@@ -1050,8 +1050,8 @@ function StandingsTable({ source, onRetry, compact, className }) {
                         <td className="py-2">
                           <span className="flex items-center gap-2">
                             <Crest src={r.logo} alt={r.abbr} className="h-5 w-5" />
-                            <span className={cx("truncate", ars && "text-[#EF0107]")}>{r.short}</span>
-                            {RIVALS.has(r.id) && <Star size={10} className="shrink-0 text-[#9C824A]" aria-label="Rival" />}
+                            <span className="truncate">{r.short}</span>
+                            {RIVALS.has(r.id) && <Star size={10} className="shrink-0 text-gold-ink" aria-label="Rival" />}
                           </span>
                         </td>
                         <td className="px-1.5 py-2 text-center tabular-nums">{r.gp}</td>
@@ -1066,11 +1066,11 @@ function StandingsTable({ source, onRetry, compact, className }) {
                 </tbody>
               </table>
               {full && (
-                <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-3 text-[11px] text-slate-500">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-3 text-[11px] text-ink-muted">
                   {[...new Map(rows.filter((r) => r.note).map((r) => [r.note.label, r.note.color])).entries()].map(([l, c]) => (
                     <span key={l} className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: c }} />{l}</span>
                   ))}
-                  <span className="inline-flex items-center gap-1.5"><Star size={10} className="text-[#9C824A]" /> Big Six rival</span>
+                  <span className="inline-flex items-center gap-1.5"><Star size={10} className="text-gold-ink" /> Big Six rival</span>
                 </div>
               )}
             </div>
@@ -1083,12 +1083,12 @@ function StandingsTable({ source, onRetry, compact, className }) {
 
 function StatTile({ icon: Icon, label, value, sub, accent = C.red }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div className="rounded-xl border border-line bg-surface p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase text-ink-muted">
         <Icon size={13} style={{ color: accent }} /> {label}
       </div>
-      <p className="mt-1 text-2xl font-black tabular-nums">{value ?? "–"}</p>
-      {sub && <p className="text-[11px] text-slate-500 dark:text-slate-400">{sub}</p>}
+      <p className="mt-1 font-display text-2xl font-extrabold tabular-nums">{value ?? "–"}</p>
+      {sub && <p className="text-[11px] text-ink-muted">{sub}</p>}
     </div>
   );
 }
@@ -1148,13 +1148,13 @@ function TeamStats({ teamSrc, standingsSrc, scheduleSrc, onRetry }) {
           </div>
           {t.winRate != null && (
             <div>
-              <div className="mb-1 flex justify-between text-[11px] font-semibold text-slate-500">
+              <div className="mb-1 flex justify-between text-[11px] font-semibold text-ink-muted">
                 <span>W {t.w}</span><span>D {t.d}</span><span>L {t.l}</span>
               </div>
-              <div className="flex h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                <div className="bg-emerald-500" style={{ width: `${(t.w / t.gp) * 100}%` }} />
-                <div className="bg-slate-400" style={{ width: `${(t.d / t.gp) * 100}%` }} />
-                <div className="bg-[#EF0107]" style={{ width: `${(t.l / t.gp) * 100}%` }} />
+              <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-2">
+                <div className="bg-emerald-600" style={{ width: `${(t.w / t.gp) * 100}%` }} />
+                <div className="bg-zinc-400" style={{ width: `${(t.d / t.gp) * 100}%` }} />
+                <div className="bg-brand" style={{ width: `${(t.l / t.gp) * 100}%` }} />
               </div>
             </div>
           )}
@@ -1178,7 +1178,7 @@ function TopPerformers({ source, onRetry, className }) {
       <CardHeader icon={Star} title="Top Performers" sub="Season stats from ESPN squad data" />
       <SourceGate source={source} onRetry={onRetry} skeleton={<SkeletonRows rows={5} />}>
         {({ players }) => (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          <ul className="divide-y divide-line">
             {LEADER_DEFS.map((def) => {
               const pool = players.filter((p) => (def.gk ? p.group === "Goalkeepers" : true));
               const ranked = [...pool].sort((a, b) => (b.stats[def.key] ?? 0) - (a.stats[def.key] ?? 0));
@@ -1189,19 +1189,19 @@ function TopPerformers({ source, onRetry, className }) {
                 <li key={def.key} className="flex items-center gap-3 px-4 py-3">
                   <PlayerAvatar p={top} className="h-11 w-11" />
                   <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-[#9C824A]">
+                    <p className="flex items-center gap-1 text-[11px] font-semibold uppercase text-gold-ink">
                       <def.icon size={12} /> {def.label}
                     </p>
                     <p className="truncate text-sm font-bold">{top.name}</p>
                     {runners.length > 0 && (
-                      <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                      <p className="truncate text-[11px] text-ink-muted">
                         Next: {runners.map((r) => `${r.lastName} ${r.stats[def.key]}`).join(" · ")}
                       </p>
                     )}
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-black tabular-nums text-[#EF0107]">{top.stats[def.key]}</p>
-                    <p className="text-[10px] uppercase text-slate-400">{def.unit}</p>
+                    <p className="font-display text-2xl font-extrabold tabular-nums text-accent">{top.stats[def.key]}</p>
+                    <p className="text-[10px] uppercase text-ink-muted">{def.unit}</p>
                   </div>
                 </li>
               );
@@ -1223,22 +1223,22 @@ function FormCard({ scheduleSrc, standingsSrc, onRetry }) {
       <div className="flex flex-1 flex-col justify-center gap-4 p-4">
         <div className="flex items-end justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">League position</p>
+            <p className="text-[11px] font-semibold uppercase text-ink-muted">League position</p>
             {row ? (
-              <p className="text-5xl font-black leading-none text-[#EF0107]">{row.rank}<span className="text-lg text-slate-400">/{standingsSrc.data.rows.length}</span></p>
-            ) : standingsSrc.status === "error" ? <p className="text-sm text-slate-500">Unavailable</p> : <Skel className="h-12 w-20" />}
+              <p className="font-display text-5xl font-extrabold leading-none text-accent">{row.rank}<span className="text-lg text-ink-muted">/{standingsSrc.data.rows.length}</span></p>
+            ) : standingsSrc.status === "error" ? <p className="text-sm text-ink-muted">Unavailable</p> : <Skel className="h-12 w-20" />}
           </div>
           {row && (
             <div className="text-right text-sm">
-              <p><span className="font-black text-xl tabular-nums">{row.pts}</span> <span className="text-slate-500">pts</span></p>
-              <p className="text-slate-500 tabular-nums">GD {row.gd > 0 ? `+${row.gd}` : row.gd}</p>
+              <p><span className="font-display font-extrabold text-xl tabular-nums">{row.pts}</span> <span className="text-ink-muted">pts</span></p>
+              <p className="text-ink-muted tabular-nums">GD {row.gd > 0 ? `+${row.gd}` : row.gd}</p>
             </div>
           )}
         </div>
         <div>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Last 5 (oldest → newest)</p>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase text-ink-muted">Last 5 (oldest → newest)</p>
           {scheduleSrc.data ? <FormStrip results={scheduleSrc.data.results} />
-            : scheduleSrc.status === "error" ? <button onClick={onRetry} className="text-xs text-[#EF0107] underline">Retry</button>
+            : scheduleSrc.status === "error" ? <button onClick={onRetry} className="text-xs text-accent underline">Retry</button>
             : <div className="flex gap-1.5">{[0, 1, 2, 3, 4].map((i) => <Skel key={i} className="h-7 w-7" />)}</div>}
         </div>
       </div>
@@ -1261,13 +1261,15 @@ function Overview({ s, load, go }) {
         <NewsCard2 title="Football News" icon={Globe} source={s.worldNews} onRetry={() => load("worldNews")} limit={4} layout="list"
           sub="Premier League & Champions League" />
       </div>
-      <Card className="flex flex-col justify-center gap-3 bg-gradient-to-br from-[#063672] to-[#0b2a5c] p-5 text-white dark:from-[#063672] dark:to-slate-900">
-        <p className="text-sm font-bold uppercase tracking-wide text-[#d2b67a]">Explore the hub</p>
+      <Card className="overflow-hidden border-white/10 bg-gradient-to-br from-navy to-crimson">
+        <div className="flex h-full flex-col justify-center gap-3 p-5 text-white">
+        <p className="font-display text-sm font-extrabold uppercase text-gold-light">Explore the hub</p>
         {[["fixtures", "Full fixture list & results"], ["news", "All news feeds"], ["squad", "Squad & availability"], ["stats", "Stats & full table"]].map(([t, l]) => (
-          <button key={t} onClick={() => go(t)} className="flex items-center justify-between rounded-lg bg-white/10 px-3 py-2 text-left text-sm font-semibold transition hover:bg-white/20">
+          <button key={t} onClick={() => go(t)} className="flex items-center justify-between rounded-lg bg-white/10 px-3 py-2 text-left text-xs transition hover:bg-white/20">
             {l} <ChevronRight size={16} />
           </button>
         ))}
+        </div>
       </Card>
     </div>
   );
@@ -1359,17 +1361,17 @@ export default function App() {
   }, [tab, s, load]);
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="min-h-screen bg-page text-on-page">
       {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#063672]/95 text-white backdrop-blur">
-        <div className="h-1 bg-gradient-to-r from-[#EF0107] via-[#9C824A] to-[#EF0107]" />
+      <header className="sticky top-0 z-30 border-b border-white/15 bg-crimson/95 text-white backdrop-blur">
+        <div className="h-1 bg-gradient-to-r from-navy via-gold to-navy" />
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3">
           <img src={crest} alt="Arsenal crest" className="h-9 w-9 shrink-0 rounded-full bg-white p-1" />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-black uppercase tracking-wide sm:text-lg">
-              Arsenal FC <span className="text-[#d2b67a]">Live Hub</span>
+            <h1 className="truncate text-base font-extrabold uppercase sm:text-lg">
+              Arsenal FC <span className="text-gold-light">Live Hub</span>
             </h1>
-            <p className="flex items-center gap-1.5 truncate text-[11px] text-white/70">
+            <p className="flex items-center gap-1.5 truncate text-[11px] text-white/90">
               <Clock size={11} /> <LastUpdated at={lastUpdated} />
               {errorCount > 0 && !refreshing && (
                 <span className="inline-flex items-center gap-1 text-amber-300"><AlertTriangle size={11} /> {errorCount} source{errorCount > 1 ? "s" : ""} failed</span>
@@ -1381,7 +1383,7 @@ export default function App() {
             {dark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
           <button onClick={refreshAll} disabled={refreshing}
-            className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#EF0107] px-3 py-2 text-xs font-bold shadow-lg shadow-black/20 transition hover:bg-[#d00006] disabled:opacity-70 sm:px-4">
+            className="inline-flex shrink-0 items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-brand shadow-lg shadow-black/20 transition hover:bg-white/90 disabled:opacity-70 sm:px-4">
             <RefreshCw size={14} className={cx(refreshing && "animate-spin")} />
             <span className="hidden sm:inline">{refreshing ? "Refreshing…" : "Refresh Data"}</span>
           </button>
@@ -1391,9 +1393,9 @@ export default function App() {
             {TABS.map(({ id, label, icon: Icon }) => (
               <button key={id} onClick={() => go(id)}
                 className={cx("relative inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-sm font-semibold transition",
-                  tab === id ? "text-white" : "text-white/60 hover:text-white")}>
+                  tab === id ? "text-white" : "text-white/80 hover:text-white")}>
                 <Icon size={15} /> {label}
-                {tab === id && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[#EF0107]" />}
+                {tab === id && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-white" />}
               </button>
             ))}
           </div>
@@ -1403,12 +1405,12 @@ export default function App() {
       <main ref={topRef} className="mx-auto max-w-7xl scroll-mt-32 space-y-4 px-4 py-5 sm:py-6">
         <HeroMatch source={s.schedule} onRetry={() => load("schedule")} />
         {s.schedule.warnings?.length > 0 && (
-          <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400"><AlertTriangle size={12} /> {s.schedule.warnings.join(" · ")}</p>
+          <p className="flex items-center gap-1.5 text-xs text-on-page"><AlertTriangle size={12} /> {s.schedule.warnings.join(" · ")}</p>
         )}
         {content}
       </main>
 
-      <footer className="mx-auto max-w-7xl px-4 pb-8 pt-2 text-center text-[11px] text-slate-500">
+      <footer className="mx-auto max-w-7xl px-4 pb-8 pt-2 text-center text-[11px] text-on-page">
         <p className="flex flex-wrap items-center justify-center gap-x-2">
           <Timer size={11} /> Live data fetched on every load from ESPN, Arseblog & r/Gunners (via rss2json). Unofficial fan hub — not affiliated with Arsenal FC.
         </p>
