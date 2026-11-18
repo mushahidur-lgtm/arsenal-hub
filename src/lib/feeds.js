@@ -1,0 +1,146 @@
+/**
+ * Feed parsing. Both feed paths (rss2json JSON, and raw RSS XML fetched through
+ * a CORS proxy) produce the same item shape so dedup time windows line up:
+ *   { id, title, link, date: Date, updated: Date|null, image, excerpt, author, outlet, source, scope, video }
+ */
+import { OUTLETS } from "./sources.js";
+
+const ENTITIES = {
+  amp: "&", quot: '"', apos: "'", lt: "<", gt: ">", nbsp: " ", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“",
+  ndash: "–", mdash: "—", hellip: "…", pound: "£", euro: "€",
+};
+export const decode = (str = "") =>
+  String(str)
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&([a-z]+);/gi, (m, n) => ENTITIES[n.toLowerCase()] ?? m);
+
+export const stripHtml = (html = "") => decode(String(html).replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+
+const firstImg = (html = "") => {
+  const m = String(html).match(/<img[^>]+src=["']([^"']+)["']/i);
+  return m ? decode(m[1]) : null;
+};
+
+/** rss2json gives "YYYY-MM-DD HH:mm:ss" in UTC with no zone marker; raw RSS gives RFC-822. */
+export function parseDate(s) {
+  if (!s) return null;
+  if (s instanceof Date) return s;
+  const str = String(s).trim();
+  const d = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(str) ? new Date(str.replace(" ", "T") + "Z") : new Date(str);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+const goodImage = (x) => x && /^https?:/.test(x) && !/redditstatic|\/self\b|default|spacer|pixel|feeds\.feedburner/.test(x);
+
+/** r/Gunners link posts: the real article URL is the "[link]" anchor in the content. */
+function redditTarget(html = "") {
+  const m = String(html).match(/<a href="([^"]+)">\[link\]<\/a>/);
+  if (!m) return null;
+  const url = decode(m[1]);
+  return /reddit\.com|redd\.it/.test(url) ? null : url;
+}
+
+function normalize({ guid, title, link, pubDate, updated, description, content, thumbnail, enclosure, author }, outletId, scope) {
+  const outlet = OUTLETS[outletId];
+  const body = content || description || "";
+  let excerpt = stripHtml(description || content || "");
+  let finalLink = link;
+  if (outletId === "reddit") {
+    excerpt = excerpt.replace(/submitted by.*$/i, "").trim();
+    const target = redditTarget(body);
+    if (target) finalLink = target;
+  }
+  // "Headline | Jonathan Wilson" → headline + author
+  let cleanTitle = decode(stripHtml(title));
+  let byline = author || "";
+  const tail = cleanTitle.match(/\s+\|\s+([A-Z][\w'’.-]+(?:\s+[A-Z][\w'’.-]+){0,3})$/);
+  if (tail) {
+    cleanTitle = cleanTitle.slice(0, tail.index);
+    byline ||= tail[1];
+  }
+  return {
+    id: guid || link,
+    title: cleanTitle,
+    link: finalLink,
+    discussion: outletId === "reddit" ? link : null,
+    date: parseDate(pubDate),
+    updated: parseDate(updated),
+    image: [thumbnail, enclosure, firstImg(body)].find(goodImage) || null,
+    excerpt: excerpt.slice(0, 600),
+    author: byline,
+    outlet: outletId,
+    source: outlet?.name ?? outletId,
+    scope,
+  };
+}
+
+/** rss2json response → items */
+export function parseRss2Json(json, outletId, scope = "arsenal") {
+  return (json?.items ?? []).map((i) =>
+    normalize(
+      {
+        guid: i.guid,
+        title: i.title,
+        link: i.link,
+        pubDate: i.pubDate,
+        description: i.description,
+        content: i.content,
+        thumbnail: i.thumbnail,
+        enclosure: i.enclosure?.link,
+        author: i.author,
+      },
+      outletId,
+      scope
+    )
+  );
+}
+
+/** Raw RSS/Atom XML → items (browser only: uses DOMParser). */
+export function parseRssXml(xmlText, outletId, scope = "arsenal") {
+  const doc = new DOMParser().parseFromString(xmlText, "text/xml");
+  if (doc.querySelector("parsererror")) throw new Error("Feed XML could not be parsed");
+  const nodes = [...doc.querySelectorAll("item, entry")];
+  const text = (el, sel) => el.querySelector(sel)?.textContent?.trim() ?? "";
+  const byTag = (el, tag) => [...el.getElementsByTagName("*")].find((n) => n.tagName === tag || n.localName === tag.split(":").pop() && n.tagName.endsWith(tag));
+  return nodes.map((el) => {
+    const linkEl = el.querySelector("link");
+    const link = linkEl?.getAttribute("href") || linkEl?.textContent?.trim() || "";
+    const media = byTag(el, "media:content") || byTag(el, "media:thumbnail");
+    const encl = el.querySelector("enclosure");
+    return normalize(
+      {
+        guid: text(el, "guid") || text(el, "id") || link,
+        title: text(el, "title"),
+        link,
+        pubDate: text(el, "pubDate") || text(el, "published") || byTag(el, "dc:date")?.textContent,
+        updated: text(el, "updated"),
+        description: text(el, "description") || text(el, "summary"),
+        content: byTag(el, "content:encoded")?.textContent || text(el, "content"),
+        thumbnail: media?.getAttribute("url"),
+        enclosure: encl?.getAttribute("type")?.startsWith("image") ? encl.getAttribute("url") : null,
+        author: byTag(el, "dc:creator")?.textContent || text(el, "author name") || text(el, "author"),
+      },
+      outletId,
+      scope
+    );
+  });
+}
+
+/** ESPN news API → items */
+export function parseEspnNews(json, scope = "arsenal") {
+  return (json?.articles ?? []).map((a) => ({
+    id: String(a.id ?? a.dataSourceIdentifier ?? a.headline),
+    title: a.headline,
+    link: a.links?.web?.href,
+    date: parseDate(a.published),
+    updated: parseDate(a.lastModified),
+    image: a.images?.[0]?.url ?? null,
+    excerpt: a.description && a.description !== a.headline ? a.description : "",
+    author: a.byline ?? "",
+    outlet: "espn",
+    source: "ESPN",
+    scope,
+    video: a.type === "Media",
+  }));
+}
