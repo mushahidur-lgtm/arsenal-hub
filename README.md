@@ -1,39 +1,39 @@
 # Arsenal Hub
 
-A daily Arsenal briefing built with React 18, Tailwind CSS v4 and lucide-react on Vite.
-News is de-duplicated across outlets and labelled by source credibility, transfers are tracked from what outlets actually report,
-and the Match Centre has fixtures, results, the table and per-match lineups, events and stats. No accounts, no paid APIs, nothing hardcoded.
+A daily Arsenal platform built with React 18, Tailwind CSS v4 and lucide-react on Vite. No accounts, no paid APIs, no backend, nothing hardcoded except a clearly labelled curated history section.
+
+- **News intelligence:** de-duplicated stories with source credibility tiers, player and topic filters, a five-item daily briefing, saved articles.
+- **Squad centre:** men's and women's first teams kept separate, player profiles with season and competition statistics, availability with source and date.
+- **Analysis:** two-player comparison with bars and a radar, limited to statistics the data provider actually supplies.
+- **Transfers:** statuses from wording and outlet reliability, a verified reporting timeline, dismissed rumours, and a local watchlist with change detection.
+- **Match Centre:** fixtures, results, tables, report, interactive pitch with ESPN's published formation, and local fan predictions.
+- **History:** curated timeline, the Invincibles season, records and eras.
 
 Live site: **https://mushahidur-lgtm.github.io/arsenal-hub/**
 
 ```
-arsenal-hub/
-├── .github/workflows/deploy.yml   # build + deploy to GitHub Pages on push to main
-├── src/
-│   ├── App.jsx                    # shell: hash routing, header, mobile bottom nav, search, homepage
-│   ├── components/
-│   │   ├── ui.jsx                 # shared primitives (panels, chips, skeletons, error states)
-│   │   ├── news.jsx               # story cards, featured story, News page, feed status
-│   │   ├── matches.jsx            # next-match hero, fixtures/results, table, Match Centre, match detail
-│   │   ├── transfers.jsx          # transfer tracker + homepage transfer watch
-│   │   └── squad.jsx              # squad, availability, top performers
-│   ├── lib/
-│   │   ├── sources.js             # outlet registry + credibility tiers + journalists
-│   │   ├── feeds.js               # RSS (rss2json or raw XML) and ESPN news parsing
-│   │   ├── news.js                # categorise, de-duplicate, rank, pick the top story (pure, node-testable)
-│   │   ├── transfers.js           # transfer direction/status extraction (pure, node-testable)
-│   │   ├── data.js                # fetching, ESPN parsers, loaders, cache, useHubData
-│   │   ├── storage.js             # localStorage prefs, bookmarks, news archive
-│   │   └── format.js              # dates/times in the viewer's timezone
-│   ├── main.jsx
-│   └── index.css                  # theme tokens (light + dark), Tailwind
-├── index.html
-└── vite.config.js                 # base: "/arsenal-hub/" + dev-only CORS proxy
+src/
+├── App.jsx                 shell: hash routing, header, bottom nav + More sheet, unified search, homepage
+├── components/
+│   ├── ui.jsx              primitives (panels, chips, skeletons, error boundary)
+│   ├── news.jsx            story cards, featured story, briefing, News page
+│   ├── matches.jsx         next-match hero, Match Centre (men/women), match detail
+│   ├── pitch.jsx           lineup pitch, match report, fan predictions
+│   ├── squad.jsx           squad centre, availability, player profile
+│   ├── analysis.jsx        player comparison
+│   ├── transfers.jsx       tracker, timeline, watchlist
+│   └── history.jsx         timeline, Invincibles, records, eras
+└── lib/
+    ├── data.js             fetching (shared in-flight requests + 30s memo), ESPN parsers, loaders, cache, useHubData
+    ├── playerstats.js      per-player season stats and photo lookup
+    ├── news.js / transfers.js / sources.js / feeds.js   pure news + transfer logic and feed parsing
+    ├── pitch.js            lineup → pitch layout (pure)
+    ├── history.js          curated history data (static, cut-offs stated)
+    ├── storage.js          local preferences, bookmarks, followed players, watchlist, predictions, recents
+    └── format.js           dates/times in the viewer's timezone
 ```
 
-Routes (hash-based, so they work on GitHub Pages): `#/`, `#/news`, `#/news?cat=injury`, `#/news?q=saka`, `#/matches`, `#/matches/<espn-event-id>`, `#/transfers`, `#/squad`.
-
-> **Tailwind v4 note:** Tailwind is wired in through the official `@tailwindcss/vite` plugin. There is no `postcss.config.js` and no `autoprefixer` dependency.
+Routes (hash-based, so refreshing any of them works on GitHub Pages): `#/`, `#/news`, `#/matches`, `#/matches?team=women`, `#/matches/<event-id>`, `#/transfers`, `#/squad`, `#/squad?team=women`, `#/squad/player/<id>`, `#/analysis?a=<id>&b=<id>`, `#/history`, `#/history/invincibles|records|eras`.
 
 ---
 
@@ -111,30 +111,24 @@ Every later `git push` to `main` redeploys.
 
 | Section | Endpoint |
 |---|---|
-| Fixtures / results | ESPN `soccer/all/teams/359/schedule` (+ `?fixture=true`), falling back to `eng.1` |
-| Match detail | ESPN `soccer/<league>/summary?event=<id>` (lineups, key events, team stats) |
-| Squad + availability | ESPN `eng.1/teams/359/roster` |
-| League table | ESPN `site.web.api.espn.com/.../eng.1/standings` |
-| Transfer target details | ESPN search + athlete profile (only for an exact, single name match) |
-| Arsenal news | RSS: BBC Sport, Sky Sports, The Athletic, The Guardian, football.london, Arseblog, r/Gunners; plus ESPN news API |
-| League news | ESPN `eng.1/news`, `uefa.champions/news` |
+| Fixtures / results | ESPN `soccer/all/teams/<id>/schedule` (+ `?fixture=true`); men 359, women 19973 |
+| Match detail | ESPN `soccer/<league>/summary?event=<id>` (lineups, formation, events, team stats, leaders, recap) |
+| Squad + availability | ESPN `<league>/teams/<id>/roster` |
+| Player statistics | ESPN `athletes/<id>/stats?team=&league=` (seasons and competitions are read from the response's own filters) |
+| Player photo | Wikipedia REST summary, only when the article is a footballer whose birth year matches; credited on the page |
+| Tables | ESPN standings (men's and women's leagues) |
+| Transfer target details | ESPN search + athlete profile (exact single-name matches only) |
+| News | RSS: BBC Sport, Sky Sports, The Athletic, The Guardian, football.london, Arseblog, r/Gunners; ESPN news API |
 
-Arsenal.com has no public RSS feed. Official items show up only when an article links straight to arsenal.com. To add a feed, set `feed` on the outlet in `src/lib/sources.js`.
+### What the data does not provide
+ESPN's free player data has no minutes, xG/xA, key passes, tackles or interceptions, so comparison and profiles never show or estimate them (and no per-90 rates). It marks no captain, gives no injury return dates and no destination clubs for departures. Arsenal.com has no public feed. Each of these is stated in the UI where it would otherwise be expected.
 
-### Credibility and de-duplication
+### Reliability
+- One request layer (`fetchJSON`) shares identical in-flight requests and reuses results for 30s; the Refresh button clears that memo.
+- Each source loads independently, is cached locally, and shows its last-fetched time. A failure keeps old data on screen with a warning.
+- The women's team data is loaded only when needed.
+- A page-level error boundary keeps one broken view from blanking the app.
 
-- **Source tiers** (`sources.js`): Official, Established journalist (only when the byline names them), Reliable reporting, Secondary reporting, Fan opinion. Tiers describe the outlet, not whether a claim is true.
-- **De-duplication** (`news.js`): two articles merge only when they share a subject (a squad player or a named person) **and** an event type (contract, injury, match, death…) in their headlines, published within 48–72h, or when their headlines are near-identical, or their canonical URLs match. A shared name alone never merges stories.
-- **Independence**: an article that cites another outlet in the same story ("according to The Athletic") isn't counted as independent.
-- **Transfer statuses** (`transfers.js`): based on wording *and* tier. Secondary outlets cap at "Interest reported"; hedged or quoted headlines are "Speculation"; "Confirmed" needs the club or two independent reliable outlets reporting completion.
+### Personal data (this device only)
+Preferences and filters, saved articles, followed players, the transfer watchlist, fan predictions and recent pages are stored in `localStorage`. Nothing is sent anywhere.
 
-Test the pure modules in node against saved feed JSON by importing `src/lib/news.js` / `src/lib/transfers.js` directly; they have no browser dependencies.
-
-### Caching, refresh and failure handling
-
-- Each source loads independently. The last good copy is kept in localStorage (`afc-cache-v2`), so the page paints instantly and is clearly marked "Showing saved data from …" until fresh data arrives.
-- Arsenal news items are archived on the device for 21 days (`afc-news-archive-v1`), so the transfer tracker and search see more than a feed's last 10 items.
-- Data refreshes every 10 minutes while the tab is visible. On matchday the schedule is re-checked every minute from 15 minutes before kick-off; scores are labelled as re-checked, not live.
-- RSS goes through rss2json first. If rss2json refuses (it rate-limits "new" feeds per IP), the raw XML is tried directly (The Athletic allows this) and then through public CORS proxies, best-effort. Every feed's status is listed at the bottom of the News page.
-- ESPN's `/teams/359` endpoint sends no CORS header and is optional enrichment only.
-- In local dev, `vite.config.js` adds a same-origin `/__proxy` limited to ESPN, rss2json and the feed hosts. It doesn't exist on GitHub Pages.

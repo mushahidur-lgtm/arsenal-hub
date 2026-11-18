@@ -2,7 +2,12 @@
 
 export const userTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export const fmtDate = (d, opts) => (d ? new Intl.DateTimeFormat(undefined, opts).format(d) : "");
+const validDate = (d) => (d instanceof Date ? !Number.isNaN(d.getTime()) : false);
+export const fmtDate = (d, opts) => {
+  if (!d) return "";
+  const date = validDate(d) ? d : new Date(d);
+  return validDate(date) ? new Intl.DateTimeFormat(undefined, opts).format(date) : "";
+};
 export const fmtKick = (d) => fmtDate(d, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 export const fmtDay = (d) => fmtDate(d, { weekday: "short", day: "numeric", month: "short" });
 export const fmtLongDay = (d) => fmtDate(d, { weekday: "long", day: "numeric", month: "long" });

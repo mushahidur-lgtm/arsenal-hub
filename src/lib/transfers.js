@@ -176,7 +176,7 @@ export function buildTransfers(stories, ctx = {}) {
             club: hit.club ?? null, // null = unknown, never guessed
             position: hit.position ?? null,
             age: hit.age ?? null,
-            photo: hit.id ? `https://a.espncdn.com/i/headshots/soccer/players/full/${hit.id}.png` : null,
+            photo: null,
             inSquad: false,
             link: hit.link,
           };

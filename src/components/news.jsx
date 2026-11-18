@@ -303,7 +303,7 @@ export function NewsPage({ stories, sources, load, bookmarks, prefs, setPrefs, q
       .filter((s) => (cat === "saved" ? false : inCategory(s, cat)))
       .filter((s) => passesSourceFilter(s, srcFilter))
       .filter((s) => playerId === "all" || storyMentions(s, playerId))
-      .filter((s) => !q || q.split(/s+/).every((w) => storyHaystack(s).includes(w)))
+      .filter((s) => !q || q.split(/\s+/).every((w) => storyHaystack(s).includes(w)))
       .sort(SORTS[sort].fn);
   }, [stories, cat, sort, srcFilter, query, playerId]);
 

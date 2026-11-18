@@ -4,6 +4,31 @@ import { timeAgo } from "../lib/format.js";
 
 export const cx = (...c) => c.filter(Boolean).join(" ");
 
+/** Keeps one broken page from blanking the whole app: shows a message and a way back. */
+export class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidUpdate(prev) {
+    if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null });
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="mx-auto max-w-md rounded-2xl border border-line bg-surface p-8 text-center">
+        <AlertTriangle className="mx-auto mb-2 text-amber-500" />
+        <p className="font-semibold text-ink">This page hit a problem</p>
+        <p className="mt-1 text-sm text-ink-muted">{String(this.state.error?.message ?? this.state.error)}</p>
+        <a href="#/" className="mt-4 inline-block rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white">Back to home</a>
+      </div>
+    );
+  }
+}
+
 /** Re-render every `ms` so relative times ("5m ago") stay true. */
 export function useNow(ms = 30000) {
   const [now, setNow] = useState(() => Date.now());

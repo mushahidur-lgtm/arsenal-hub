@@ -95,6 +95,35 @@ export async function loadPlayerBio(id) {
   }
 }
 
+const PHOTO_KEY = "afc-photos-v1";
+
+/**
+ * A player photo from Wikipedia (Wikimedia Commons licence, credited on the page).
+ * Used only when the article is clearly a footballer and, if we know the player's
+ * birth year, it matches the article's "(born YYYY)", so a namesake is never shown.
+ * Cached for 30 days (misses for 7).
+ */
+export async function loadPlayerPhoto(name, dob) {
+  const cache = readJSON(PHOTO_KEY, {});
+  const hit = cache[name];
+  if (hit && Date.now() - hit.at < (hit.src ? 30 : 7) * 86400e3) return hit.src ? hit : null;
+  const year = dob instanceof Date && !Number.isNaN(dob.getTime()) ? dob.getFullYear() : null;
+  let found = null;
+  for (const title of [name, `${name} (footballer)`]) {
+    try {
+      const j = await fetchJSON(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}`, { proxy: false, timeoutMs: 8000 });
+      if (j?.type !== "standard" || !/footballer|soccer/i.test(j.description ?? "") || !j.thumbnail?.source) continue;
+      const born = (j.description.match(/born (d{4})/) ?? [])[1];
+      if (year && born && Number(born) !== year) continue;
+      found = { src: j.thumbnail.source, page: j.content_urls?.desktop?.page ?? null };
+      break;
+    } catch { /* try next title */ }
+  }
+  cache[name] = { at: Date.now(), ...(found ?? {}) };
+  writeJSON(PHOTO_KEY, cache);
+  return found;
+}
+
 /** Seasons present in a loaded stats object for the chosen competition ("all" = any), newest first. */
 export function seasonsOf(stats, comp = "all") {
   if (!stats) return [];
