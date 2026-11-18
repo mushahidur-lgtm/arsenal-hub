@@ -143,9 +143,17 @@ export function buildTransfers(stories, ctx = {}) {
       const names = [...new Set(arts.flatMap((a) => candidateNames(a.title, { exclude: squadNames })))];
       for (const n of names) {
         const hit = ctx.lookups?.[fold(n)];
-        if (hit && hit.club) {
+        if (hit && !hit.miss) {
           subject = hit.name ?? n;
-          player = { name: hit.name ?? n, club: hit.club, league: hit.league, photo: hit.id ? `https://a.espncdn.com/i/headshots/soccer/players/full/${hit.id}.png` : null, inSquad: false, link: hit.link };
+          player = {
+            name: hit.name ?? n,
+            club: hit.club ?? null, // null = unknown, never guessed
+            position: hit.position ?? null,
+            age: hit.age ?? null,
+            photo: hit.id ? `https://a.espncdn.com/i/headshots/soccer/players/full/${hit.id}.png` : null,
+            inSquad: false,
+            link: hit.link,
+          };
           break;
         }
       }

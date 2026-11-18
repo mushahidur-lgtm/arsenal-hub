@@ -33,6 +33,25 @@ export function parseDate(s) {
 
 const goodImage = (x) => x && /^https?:/.test(x) && !/redditstatic|\/self\b|default|spacer|pixel|feeds\.feedburner/.test(x);
 
+/** Feeds often ship tiny thumbnails; ask for a larger rendition where the CDN supports it. */
+export function upgradeImage(url) {
+  if (!url) return url;
+  // BBC ichef: /ace/standard/240/… or /news/240/… → 800px
+  return url.replace(/(ichef\.bbci\.co\.uk\/(?:ace\/(?:standard|ws)|news))\/\d{2,4}\//, "$1/800/");
+}
+
+/** Rough width hint from the URL, used to prefer sharper images for large slots. */
+export function imageWidthHint(url = "") {
+  const m = url.match(/[?&](?:width|w)=(\d+)/) || url.match(/\/(\d{3,4})x\d{3,4}\//) || url.match(/\/(?:standard|news)\/(\d{3,4})\//);
+  return m ? Number(m[1]) : 1000;
+}
+
+/** Multi-paragraph descriptions → readable text ("standfirst. First para.") */
+function htmlToText(html = "") {
+  const lines = String(html).replace(/<\/(p|li|h\d)>|<br\s*\/?>/gi, "\n").split("\n").map(stripHtml).filter(Boolean);
+  return lines.map((l, i) => (i < lines.length - 1 && !/[.!?…:]$/.test(l) ? `${l}.` : l)).join(" ");
+}
+
 /** r/Gunners link posts: the real article URL is the "[link]" anchor in the content. */
 function redditTarget(html = "") {
   const m = String(html).match(/<a href="([^"]+)">\[link\]<\/a>/);
@@ -44,7 +63,7 @@ function redditTarget(html = "") {
 function normalize({ guid, title, link, pubDate, updated, description, content, thumbnail, enclosure, author }, outletId, scope) {
   const outlet = OUTLETS[outletId];
   const body = content || description || "";
-  let excerpt = stripHtml(description || content || "");
+  let excerpt = htmlToText(description || content || "");
   let finalLink = link;
   if (outletId === "reddit") {
     excerpt = excerpt.replace(/submitted by.*$/i, "").trim();
@@ -66,7 +85,7 @@ function normalize({ guid, title, link, pubDate, updated, description, content, 
     discussion: outletId === "reddit" ? link : null,
     date: parseDate(pubDate),
     updated: parseDate(updated),
-    image: [thumbnail, enclosure, firstImg(body)].find(goodImage) || null,
+    image: upgradeImage(decode([thumbnail, enclosure, firstImg(body)].find(goodImage) || "")) || null,
     excerpt: excerpt.slice(0, 600),
     author: byline,
     outlet: outletId,

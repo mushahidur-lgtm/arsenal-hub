@@ -38,7 +38,8 @@ export const OUTLETS = {
   arsenal: { name: "Arsenal.com", tier: "official", feed: null, domains: ["arsenal.com"] },
   bbc: { name: "BBC Sport", tier: "reliable", feed: "https://feeds.bbci.co.uk/sport/football/teams/arsenal/rss.xml", domains: ["bbc.co.uk", "bbc.com"] },
   sky: { name: "Sky Sports", tier: "reliable", feed: "https://www.skysports.com/rss/11670", domains: ["skysports.com"] },
-  athletic: { name: "The Athletic", tier: "reliable", feed: "https://www.nytimes.com/athletic/rss/football/arsenal/", domains: ["nytimes.com/athletic", "theathletic.com"] },
+  // `cors: true` = the feed host sends CORS headers, so it's fetched directly (no rss2json quota used)
+  athletic: { name: "The Athletic", tier: "reliable", feed: "https://www.nytimes.com/athletic/rss/football/arsenal/", cors: true, domains: ["nytimes.com/athletic", "theathletic.com"] },
   guardian: { name: "The Guardian", tier: "reliable", feed: "https://www.theguardian.com/football/arsenal/rss", domains: ["theguardian.com"] },
   espn: { name: "ESPN", tier: "reliable", espn: true, domains: ["espn.com", "espn.co.uk"] },
   reuters: { name: "Reuters", tier: "reliable", feed: null, domains: ["reuters.com"] },

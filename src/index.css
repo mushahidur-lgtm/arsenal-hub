@@ -3,44 +3,55 @@
 /* Class-based dark mode so the in-app toggle works */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ───────────── Arsenal.com theme ─────────────
+/* ───────────── Arsenal Hub theme ─────────────
    Raw brand colours + semantic roles. Components use only the semantic
    utilities generated below (bg-page, bg-surface, text-ink, text-accent…),
-   so the whole site re-themes from this one block. Contrast ratios noted
-   are against the surface the token is used on (WCAG AA = 4.5:1 for text). */
+   so the whole site re-themes from this one block.
+
+   Red is an accent, not a background: active nav, the crest/wordmark,
+   scores, selected filters and primary actions. Pages sit on off-white
+   (light) or charcoal (dark). Contrast ratios are against the surface the
+   token is used on (WCAG AA = 4.5:1 for body text). */
 :root {
   /* Brand */
-  --ars-red: #db0007;          /* primary; white text on it = 4.9:1 */
-  --ars-red-bright: #ef0107;   /* highlights/glows only (white on it < 4.5) */
-  --ars-crimson: #9c0004;      /* section differentiation, header, hovers */
+  --ars-red: #db0007;          /* white text on it = 4.9:1 */
+  --ars-red-bright: #ef0107;
+  --ars-crimson: #9c0004;
   --ars-navy: #063672;
-  --ars-gold: #9c824a;         /* borders/decoration */
-  --ars-gold-deep: #7a6436;    /* gold for text/badge fills; 5.6:1 on white */
-  --ars-gold-light: #e0c68f;   /* gold for text on navy/crimson: 5.0:1 on crimson */
+  --ars-gold: #9c824a;
+  --ars-gold-deep: #7a6436;    /* 5.6:1 on white */
+  --ars-gold-light: #e0c68f;
 
   /* Roles: light */
-  --page-bg: var(--ars-red);
-  --on-page: #ffffff;
+  --page-bg: #f5f4f1;
+  --on-page: #141414;
   --surface: #ffffff;
-  --surface-2: #f4f4f5;
-  --line: #e4e4e7;
-  --ink: #111111;              /* 18.9:1 on white */
-  --ink-muted: #52525b;        /* 7.7:1 on white */
-  --accent-ink: var(--ars-red);       /* red text on cards: 4.9:1 */
-  --gold-ink: var(--ars-gold-deep);   /* 5.6:1 */
-  --navy-ink: var(--ars-navy);        /* 11.6:1 */
+  --surface-2: #f0efeb;
+  --line: #e4e2dc;
+  --ink: #141414;              /* 17.9:1 on white */
+  --ink-muted: #5b5b62;        /* 6.6:1 on white */
+  --accent-ink: #c80006;       /* red text on white: 5.6:1 */
+  --gold-ink: var(--ars-gold-deep);
+  --navy-ink: var(--ars-navy);
+  --hero-from: #17171a;
+  --hero-to: #3a0306;
+  color-scheme: light;
 }
 
 :root.dark {
-  --page-bg: var(--ars-crimson);
-  --surface: #121212;
-  --surface-2: #1e1e1e;
-  --line: #2c2c2c;
-  --ink: #f5f5f5;              /* 17.4:1 on #121212 */
-  --ink-muted: #a1a1aa;        /* 7.6:1 */
-  --accent-ink: #ff5a5f;       /* brand red lifted for dark cards: 6.1:1 */
+  --page-bg: #0e0e10;
+  --on-page: #f2f2f2;
+  --surface: #17171a;
+  --surface-2: #222226;
+  --line: #2d2d32;
+  --ink: #f2f2f2;              /* 16.5:1 on #17171a */
+  --ink-muted: #a3a3ab;        /* 7.4:1 */
+  --accent-ink: #ff5a5f;       /* 6.0:1 */
   --gold-ink: var(--ars-gold-light);
   --navy-ink: #8fb4e8;
+  --hero-from: #141416;
+  --hero-to: #2c0204;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -62,32 +73,43 @@
   --color-accent: var(--accent-ink);
   --color-gold-ink: var(--gold-ink);
   --color-navy-ink: var(--navy-ink);
+  --color-hero-from: var(--hero-from);
+  --color-hero-to: var(--hero-to);
 
-  --font-sans: "Inter", "Open Sans", "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Montserrat", "Helvetica Neue", "Roboto", Arial, sans-serif;
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Montserrat", "Helvetica Neue", Arial, sans-serif;
 }
 
 @layer base {
-  html { -webkit-tap-highlight-color: transparent; }
+  html { -webkit-tap-highlight-color: transparent; text-size-adjust: 100%; }
   body { @apply bg-page font-sans text-on-page antialiased; }
+  h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.015em; }
+  button { cursor: pointer; }
+  button:disabled { cursor: default; }
+  :focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; border-radius: 4px; }
+  img { color: transparent; } /* hide alt text flashes on broken images */
+}
 
-  /* Editorial headings: Montserrat, extra-bold, tight tracking */
-  h1, h2, h3 {
-    font-family: var(--font-display);
-    font-weight: 800;
-    letter-spacing: -0.02em;
-  }
-
-  /* Buttons + nav read like Arsenal.com: uppercase Montserrat */
-  button {
-    font-family: var(--font-display);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-
-  :focus-visible { outline: 2px solid var(--ars-gold-light); outline-offset: 2px; }
+/* Section eyebrow: small uppercase label above a heading */
+.eyebrow {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+
+@keyframes fade-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fade-up 0.25s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* Leave room for the mobile bottom nav + iOS home indicator */
+.pb-safe { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
+@media (min-width: 768px) { .pb-safe { padding-bottom: 2rem; } }
+.bottom-safe { padding-bottom: env(safe-area-inset-bottom); }

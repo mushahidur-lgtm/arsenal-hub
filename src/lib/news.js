@@ -6,6 +6,7 @@
  *   raw items ──enrich──▶ articles ──cluster──▶ stories ──rank──▶ UI
  */
 import { CITABLE, JOURNALISTS, OUTLETS, TIERS, outletForUrl } from "./sources.js";
+import { imageWidthHint } from "./feeds.js";
 
 /* ───────────────────────── Text helpers ───────────────────────── */
 
@@ -59,7 +60,7 @@ function headlineEntities(title, extraGeneric) {
 const CONCEPTS = {
   death: /\b(dies|died|dead|death|passed away|tribute|tributes|obituary|mourn\w*|rip)\b/,
   contract: /\b(contract|renew\w*|extension|extend\w* (his |their )?(contract|deal|stay)|new deal|new [\w-]+( [\w-]+)? deal|\w+-year deal|long-term deal|signs? new|commit\w* (his )?future|wages?|salary|pay rise)\b/,
-  transfer: /\b(transfer|bid|bids|offer|target\w*|interest\w*|swap|loan\w*|approach\w*|pursu\w*|chase|eye|eyes|eyeing|monitor\w*|wants?|keen|fee|linked|signing|sign|signs|signed|move|exit|sale|sell|depart\w*|talks)\b/,
+  transfer: /\b(transfer|bid|bids|offer|target\w*|interest\w*|swap|loan\w*|approach\w*|pursu\w*|chase|eyes|eyeing|monitor\w*|wants? to sign|keen on|fee|linked|signing|sign|signs|signed|move|exit|sale|sell|depart\w*|talks)\b/,
   injury: /\b(injur\w*|hamstring|knee|ankle|groin|calf|thigh|muscle|fitness|setback|scan|sidelined|ruled out|surgery|knock|doubt|absence|layoff|recovery|return\w* to training|behind-closed-doors)\b/,
   match: /\b(win|wins|won|beat|beats|beaten|draw|draws|drew|defeat\w*|lose|loses|lost|victory|thrash\w*|held|stun\w*|ratings|player ratings|match report|preview|line-?up|team news|predicted|starting xi|kick-?off|result|comeback|clash|winner|equaliser|scores?|\d+-\d+)\b/,
   discipline: /\b(ban|banned|suspend\w*|red card|charged|fa charge|sent off)\b/,
@@ -103,7 +104,9 @@ function categorize(a) {
   if (a.tier === "official") cats.add("official");
   if (a.concepts.has("match") && !a.titleConcepts.has("death")) cats.add("match");
   // Transfer talk is judged on the headline only: summaries mention "signing" far too loosely.
-  if (a.titleConcepts.has("transfer") || a.titleConcepts.has("contract")) cats.add("transfer");
+  // Awards and obituaries that happen to use "wants"/"move" aren't transfer stories.
+  const notTransfer = a.titleConcepts.has("award") || a.titleConcepts.has("death");
+  if (!notTransfer && (a.titleConcepts.has("transfer") || a.titleConcepts.has("contract"))) cats.add("transfer");
   if (a.concepts.has("injury")) cats.add("injury");
   if (a.scope === "ucl" || /\bchampions league\b|\bucl\b/.test(text)) cats.add("ucl");
   if (a.scope === "league" || /\bpremier league\b/.test(text)) cats.add("pl");
@@ -319,7 +322,8 @@ export function toStory(articles, now = Date.now()) {
   const first = dates.length ? new Date(Math.min(...dates)) : null;
   const categories = new Set(articles.flatMap((a) => [...a.categories]));
   const best = ranked.find((a) => a.summary) ?? lead;
-  const image = ranked.find((a) => a.image)?.image ?? null;
+  // Sharpest image available across the cluster (feeds vary from 140px to 1920px)
+  const image = [...articles].filter((a) => a.image).sort((x, y) => imageWidthHint(y.image) - imageWidthHint(x.image))[0]?.image ?? null;
   const story = {
     id: lead.canonical || lead.id,
     lead,
