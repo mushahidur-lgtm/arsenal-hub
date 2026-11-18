@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Activity, ArrowLeft, Goal, Hand, HeartPulse, Star, Target } from "lucide-react";
 import { TEAM_ID, WOMEN_ID } from "../lib/data.js";
-import { loadPlayerBio, loadPlayerStats, seasonLine, seasonsOf } from "../lib/playerstats.js";
+import { loadPlayerBio, loadPlayerPhoto, loadPlayerStats, seasonLine, seasonsOf } from "../lib/playerstats.js";
 import { storyMentions } from "../lib/news.js";
-import { fmtDay, fmtFull, timeAgo } from "../lib/format.js";
+import { fmtDate, fmtDay, fmtFull, timeAgo } from "../lib/format.js";
 import { Chips, EmptyState, ErrorState, Panel, SectionHead, Select, Skel, SkeletonRows, SourceGate, cx, useNow } from "./ui.jsx";
 import { StoryRow } from "./news.jsx";
 
@@ -296,7 +296,7 @@ const FACTS = (p) => [
   ["Position", p.position],
   ["Shirt number", p.jersey ? `#${p.jersey}` : null],
   ["Nationality", p.nationality],
-  ["Age", p.age ? `${p.age}${p.dob ? ` (born ${fmtDay(p.dob)} ${p.dob.getFullYear()})` : ""}` : null],
+  ["Age", p.age ? `${p.age}${p.dob ? ` (born ${fmtDate(p.dob, { day: "numeric", month: "long", year: "numeric" })})` : ""}` : null],
   ["Born in", p.birthPlace],
   ["Height", p.height],
   ["Weight", p.weight],
@@ -309,6 +309,15 @@ export function PlayerProfilePage({ id, team, roster, stories, bookmarks, saved,
   const [comp, setComp] = useState("all");
   const [season, setSeason] = useState(null);
   useEffect(() => { loadPlayerBio(id).then(setBio); }, [id]);
+  const [photo, setPhoto] = useState(null);
+  const playerName = roster.data?.players.find((p) => String(p.id) === String(id));
+  useEffect(() => {
+    setPhoto(null);
+    if (!playerName || playerName.photo) return undefined;
+    let cancelled = false;
+    loadPlayerPhoto(playerName.name, playerName.dob).then((p) => !cancelled && setPhoto(p));
+    return () => { cancelled = true; };
+  }, [playerName?.id, playerName?.photo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const player = roster.data?.players.find((p) => String(p.id) === String(id));
   const seasons = useMemo(() => seasonsOf(stats.data, comp), [stats.data, comp]);
@@ -317,6 +326,7 @@ export function PlayerProfilePage({ id, team, roster, stories, bookmarks, saved,
   const back = <a href={team === "women" ? "#/squad?team=women" : "#/squad"} className="inline-flex items-center gap-1 text-sm font-semibold text-accent"><ArrowLeft size={14} /> Squad</a>;
   if (!player) {
     if (!roster.data && roster.status !== "error") return <div className="space-y-4">{back}<SkeletonRows rows={5} /></div>;
+    if (!roster.data) return <div className="space-y-3">{back}<ErrorState title="Couldn’t load the squad" message={roster.error} onRetry={onRetryRoster} /></div>;
     return <div className="space-y-3">{back}<ErrorState title="Player not found" message="This player isn’t in the current squad list from ESPN." onRetry={onRetryRoster} /></div>;
   }
 
@@ -324,7 +334,8 @@ export function PlayerProfilePage({ id, team, roster, stories, bookmarks, saved,
   const line = stats.data ? seasonLine(stats.data, season, comp) : null;
   const currentLabel = (player.season ?? "").match(/^\d{4}(-\d{2,4})?/)?.[0];
   // Appearances come from the squad feed (Premier League / league season only).
-  const apps = season === currentLabel && (comp === "all" || comp === stats.data?.competitions?.[0]?.slug) ? player.stats.appearances : null;
+  // Only shown for the league alone, so it never sits beside totals summed across cups.
+  const apps = season === currentLabel && comp !== "all" && comp === stats.data?.competitions?.[0]?.slug ? player.stats.appearances : null;
   const news = (stories ?? []).filter((s) => s.scope === "arsenal" && storyMentions(s, player.id)).sort((x, y) => (y.date ?? 0) - (x.date ?? 0)).slice(0, 5);
   const keys = line ? metricKeys(Object.keys(line)) : [];
   const compOptions = [{ id: "all", label: "All competitions" }, ...(stats.data?.competitions ?? []).map((c) => ({ id: c.slug, label: c.name }))];
@@ -334,7 +345,10 @@ export function PlayerProfilePage({ id, team, roster, stories, bookmarks, saved,
     <div className="space-y-6">
       {back}
       <div className="flex flex-wrap items-center gap-4">
-        <PlayerAvatar p={player} className="h-24 w-24 sm:h-28 sm:w-28" />
+        <div className="shrink-0">
+          <PlayerAvatar p={photo ? { ...player, photo: photo.src } : player} className="h-24 w-24 sm:h-28 sm:w-28" />
+          {photo?.page && <a href={photo.page} target="_blank" rel="noopener noreferrer" className="mt-1 block text-center text-[9px] text-ink-muted hover:underline">Photo: Wikipedia</a>}
+        </div>
         <div className="min-w-0 flex-1">
           <p className="eyebrow text-accent">{team === "women" ? "Arsenal Women" : "Arsenal"} · {player.position}</p>
           <h1 className="text-2xl text-ink sm:text-3xl">{player.jersey && <span className="mr-2 text-accent">{player.jersey}</span>}{player.name}</h1>

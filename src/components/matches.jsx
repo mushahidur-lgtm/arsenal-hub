@@ -356,6 +356,10 @@ const COMP_FILTERS = [
   { id: "uefa.champions", label: "Champions League" },
   { id: "eng.fa", label: "FA Cup" },
   { id: "eng.league_cup", label: "Carabao Cup" },
+  { id: "eng.w.1", label: "Women’s Super League" },
+  { id: "uefa.wchampions", label: "Women’s Champions League" },
+  { id: "eng.w.fa_cup", label: "Women’s FA Cup" },
+  { id: "eng.w.league_cup", label: "Women’s League Cup" },
   { id: "friendly", label: "Friendlies" },
 ];
 const compMatch = (m, f) => (f === "all" ? true : f === "friendly" ? m.friendly : m.leagueSlug === f);
@@ -536,11 +540,14 @@ export function MatchDetailPage({ id, schedules, stories, onRetrySchedule, ensur
   }, [match?.id, match?.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!match) {
-    if (schedules.some((s) => !s.data && s.status !== "error")) return <SkeletonRows rows={6} />;
+    const womenPending = !womenSchedule.data && womenSchedule.status !== "error";
+    if ((!menSchedule.data && menSchedule.status !== "error") || (menSchedule.data && womenPending)) return <SkeletonRows rows={6} />;
     return (
       <div className="space-y-3">
         <a href="#/matches" className="inline-flex items-center gap-1 text-sm font-semibold text-accent"><ArrowLeft size={14} /> Match Centre</a>
-        <ErrorState title="Match not found" message="This match isn’t in Arsenal’s current ESPN schedule." onRetry={onRetrySchedule} />
+        {menSchedule.status === "error" && !menSchedule.data
+          ? <ErrorState title="Couldn’t load fixtures" message={menSchedule.error} onRetry={onRetrySchedule} />
+          : <ErrorState title="Match not found" message="This match isn’t in Arsenal’s current ESPN schedule." onRetry={onRetrySchedule} />}
       </div>
     );
   }

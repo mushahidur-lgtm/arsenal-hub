@@ -271,7 +271,8 @@ export function parseRoster(json) {
       weight: a.displayWeight ?? null,
       season: json?.season?.displayName ?? null,
       flag: a.flag?.href,
-      photo: a.headshot?.href || `https://a.espncdn.com/i/headshots/soccer/players/full/${a.id}.png`,
+      // ESPN only supplies a headshot for a few players; guessed URLs 404, so none is invented.
+      photo: a.headshot?.href || null,
       link: a.links?.find((l) => l.rel?.includes("playercard"))?.href,
       availability: availabilityOf(a),
       stats,
@@ -532,7 +533,7 @@ export const LAZY_SOURCES = new Set(["womenRoster", "womenSchedule", "womenStand
 
 const CACHE_KEY = "afc-cache-v2";
 const CACHE_MAX_AGE = 3 * 86400e3; // older than this is not worth showing at all
-const DATE_KEYS = new Set(["date", "updated", "savedAt"]);
+const DATE_KEYS = new Set(["date", "updated", "savedAt", "dob"]);
 const revive = (k, v) => (DATE_KEYS.has(k) && typeof v === "string" ? new Date(v) : v);
 
 function readCache() {
@@ -565,7 +566,9 @@ export function useHubData() {
     const cached = readCache();
     return Object.fromEntries(Object.keys(LOADERS).map((k) => [
       k,
-      cached[k] ? { ...initialSource, status: "cached", data: cached[k].data, savedAt: cached[k].savedAt } : initialSource,
+      cached[k]
+        ? { ...initialSource, status: "cached", data: cached[k].data, savedAt: cached[k].savedAt }
+        : LAZY_SOURCES.has(k) ? { ...initialSource, status: "idle" } : initialSource,
     ]));
   });
   const [lastUpdated, setLastUpdated] = useState(null);

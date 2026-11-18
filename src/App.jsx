@@ -16,7 +16,7 @@ import { buildTransfers, namesToLookUp } from "./lib/transfers.js";
 import { searchHistory } from "./lib/history.js";
 import { readJSON, useBookmarks, usePersistentState, usePredictions, useRecents, useSavedPlayers, useWatchlist } from "./lib/storage.js";
 import { fmtLongDay, fmtTime, relDay, sameDay, timeAgo } from "./lib/format.js";
-import { Chips, Crest, EmptyState, Panel, SectionHead, cx, useNow } from "./components/ui.jsx";
+import { Chips, Crest, EmptyState, ErrorBoundary, Panel, SectionHead, cx, useNow } from "./components/ui.jsx";
 import { BriefingList, FanTalk, FeaturedSkeleton, FeaturedStory, NewsPage, StoryListSkeleton, StoryRow } from "./components/news.jsx";
 import { FormStrip, MatchCentrePage, MatchDetailPage, MatchList, NextMatchHero, StandingsTable } from "./components/matches.jsx";
 import { AvailabilityList, PlayerAvatar, PlayerProfilePage, SquadPage } from "./components/squad.jsx";
@@ -616,7 +616,9 @@ export default function App() {
         <div className="mb-4 flex items-center justify-between text-[11px] text-ink-muted xl:hidden">
           <Freshness sources={s} lastUpdated={lastUpdated} refreshing={refreshing} />
         </div>
-        <div key={route.page + route.parts.join("/") + team} className="fade-up">{page}</div>
+        <ErrorBoundary resetKey={route.page + route.parts.join("/") + team}>
+          <div key={route.page + route.parts.join("/") + team} className="fade-up">{page}</div>
+        </ErrorBoundary>
         <footer className="mt-12 border-t border-line pt-4 text-[11px] leading-relaxed text-ink-muted">
           <p>
             Unofficial fan site, not affiliated with Arsenal FC. Match, squad and player data from ESPN; news from BBC Sport, Sky Sports, The Athletic, The Guardian, ESPN,
