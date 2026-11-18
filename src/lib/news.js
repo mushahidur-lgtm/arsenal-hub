@@ -10,7 +10,10 @@ import { imageWidthHint } from "./feeds.js";
 
 /* ───────────────────────── Text helpers ───────────────────────── */
 
-export const fold = (s = "") => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+// NFD doesn't decompose ø/æ/ß/ł/đ, so map them first ("Ødegaard" ≡ "Odegaard").
+const SPECIAL = { ø: "o", Ø: "O", æ: "ae", Æ: "Ae", ß: "ss", ł: "l", Ł: "L", đ: "d", Đ: "D", œ: "oe", Œ: "Oe", ı: "i" };
+export const fold = (s = "") =>
+  String(s).replace(/[øØæÆßłŁđĐœŒı]/g, (c) => SPECIAL[c]).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 const STOP = new Set(`a an the and or but of to in on for with as at by from into onto over under after before about
   is are was were be been being has have had do does did will would could should can may might must shall
@@ -309,8 +312,9 @@ const tierRank = (t) => TIERS[t]?.rank ?? 0;
 export function toStory(articles, now = Date.now()) {
   // Lead article: most credible outlet, straight news over analysis, has an image, most recent.
   const isNews = (a) => (a.primary === "analysis" ? 0 : 1);
+  const imgScore = (a) => (!a.image ? 0 : imageWidthHint(a.image) < 400 ? 1 : 2);
   const ranked = [...articles].sort(
-    (x, y) => tierRank(y.tier) - tierRank(x.tier) || isNews(y) - isNews(x) || !!y.image - !!x.image || (y.date ?? 0) - (x.date ?? 0)
+    (x, y) => tierRank(y.tier) - tierRank(x.tier) || isNews(y) - isNews(x) || imgScore(y) - imgScore(x) || (y.date ?? 0) - (x.date ?? 0)
   );
   const lead = ranked[0];
   const outlets = [...new Set(articles.map((a) => a.source))];
@@ -322,8 +326,13 @@ export function toStory(articles, now = Date.now()) {
   const first = dates.length ? new Date(Math.min(...dates)) : null;
   const categories = new Set(articles.flatMap((a) => [...a.categories]));
   const best = ranked.find((a) => a.summary) ?? lead;
-  // Sharpest image available across the cluster (feeds vary from 140px to 1920px)
-  const image = [...articles].filter((a) => a.image).sort((x, y) => imageWidthHint(y.image) - imageWidthHint(x.image))[0]?.image ?? null;
+  // Use the lead article's own image. Only if it has none, borrow the sharpest
+  // one from another outlet in the cluster, and credit that outlet.
+  const donor = lead.image
+    ? lead
+    : [...articles].filter((a) => a.image).sort((x, y) => imageWidthHint(y.image) - imageWidthHint(x.image))[0];
+  const image = donor?.image ?? null;
+  const imageCredit = donor && donor.source !== lead.source ? donor.source : null;
   const story = {
     id: lead.canonical || lead.id,
     lead,
@@ -338,6 +347,7 @@ export function toStory(articles, now = Date.now()) {
     tier: lead.tier,
     summary: best.summary,
     image,
+    imageCredit,
     scope: lead.scope,
   };
   story.score = relevance(story, now);

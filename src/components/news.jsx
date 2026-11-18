@@ -26,6 +26,15 @@ export function TierBadge({ tier, className }) {
   );
 }
 
+/** Shown when a story's image comes from a different outlet than its headline. */
+function ImageCredit({ source, small }) {
+  return (
+    <span className={cx("absolute bottom-1 right-1 max-w-[95%] truncate rounded bg-black/65 text-white", small ? "px-1 text-[8px]" : "bottom-2 right-2 px-1.5 py-0.5 text-[10px]")}>
+      Image: {source}
+    </span>
+  );
+}
+
 export function CategoryTag({ cat }) {
   if (!cat || !CATEGORY_SHORT[cat]) return null;
   return <span className="eyebrow text-[10px] text-accent">{CATEGORY_SHORT[cat]}</span>;
@@ -142,6 +151,7 @@ export function StoryRow({ story, bookmarks, now, showImage = true, dense }) {
             <a href={a.link} target="_blank" rel="noopener noreferrer" tabIndex={-1} aria-hidden>
               <Thumb src={story.image} className={cx("rounded-lg", dense ? "h-16 w-20" : "h-20 w-24 sm:h-24 sm:w-36")}>
                 {a.video && <PlayCircle size={18} className="absolute bottom-1 left-1 text-white drop-shadow" />}
+                {story.imageCredit && !dense && <ImageCredit source={story.imageCredit} small />}
               </Thumb>
             </a>
           )}
@@ -164,7 +174,9 @@ export function FeaturedStory({ story, bookmarks, now }) {
       <div className={cx("grid", showImage && "md:grid-cols-5")}>
         {showImage && (
           <a href={a.link} target="_blank" rel="noopener noreferrer" className="block md:col-span-3" tabIndex={-1} aria-hidden>
-            <Thumb src={story.image} priority onBroken={() => setNoImage(true)} className="aspect-[16/9] h-full w-full md:aspect-auto md:min-h-[300px]" />
+            <Thumb src={story.image} priority onBroken={() => setNoImage(true)} className="aspect-[16/9] h-full w-full md:aspect-auto md:min-h-[300px]">
+              {story.imageCredit && <ImageCredit source={story.imageCredit} />}
+            </Thumb>
           </a>
         )}
         <div className={cx("flex flex-col gap-3 p-5 md:p-6", showImage ? "md:col-span-2" : "border-l-4 border-brand")}>

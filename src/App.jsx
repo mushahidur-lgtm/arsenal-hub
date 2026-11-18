@@ -440,9 +440,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-page text-ink">
-      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2">Skip to content</a>
+      <a
+        href="#main"
+        onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2"
+      >
+        Skip to content
+      </a>
       <Header route={route} dark={dark} setDark={setDark} onRefresh={refreshAll} refreshing={refreshing} openSearch={() => setSearchOpen(true)} sources={s} lastUpdated={lastUpdated} />
-      <main id="main" className="pb-safe mx-auto max-w-6xl px-4 pt-5 sm:pt-8">
+      <main id="main" tabIndex={-1} className="pb-safe outline-none mx-auto max-w-6xl px-4 pt-5 sm:pt-8">
         <div className="mb-4 flex items-center justify-between text-[11px] text-ink-muted lg:hidden">
           <Freshness sources={s} lastUpdated={lastUpdated} refreshing={refreshing} />
         </div>

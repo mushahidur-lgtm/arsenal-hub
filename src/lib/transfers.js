@@ -237,17 +237,16 @@ export function namesToLookUp(stories, squad = []) {
   return [...names];
 }
 
-/** Transfer window context for the overview header (Premier League windows). */
+/**
+ * Transfer window context for the overview header. Exact Premier League
+ * window dates change every season, so this only states the usual months
+ * ("closes early February"), never a specific day.
+ */
 export function windowInfo(now = new Date()) {
   const y = now.getFullYear();
   const m = now.getMonth(); // 0-based
-  const summerOpen = new Date(y, 5, 14); // mid-June (approx.; exact dates vary by season)
-  const summerClose = new Date(y, 8, 1, 23);
-  const winterOpen = new Date(y, 0, 1);
-  const winterClose = new Date(y, 1, 2, 23);
-  if (now >= winterOpen && now <= winterClose) return { open: true, name: `January ${y} window`, closes: winterClose };
-  if (now >= summerOpen && now <= summerClose) return { open: true, name: `Summer ${y} window`, closes: summerClose };
-  const nextJan = m >= 8 ? new Date(y + 1, 0, 1) : null;
-  if (nextJan) return { open: false, name: `January ${y + 1} window`, opens: nextJan };
-  return { open: false, name: `Summer ${y} window`, opens: summerOpen };
+  if (m === 0) return { open: true, name: `January ${y} window`, timing: "usually closes in early February" };
+  if (m >= 5 && m <= 7) return { open: true, name: `Summer ${y} window`, timing: "usually closes around 1 September" };
+  if (m >= 8) return { open: false, name: `January ${y + 1} window`, timing: "opens on 1 January" };
+  return { open: false, name: `Summer ${y} window`, timing: "usually opens in mid-June" };
 }

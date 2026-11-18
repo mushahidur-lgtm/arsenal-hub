@@ -192,7 +192,7 @@ export function TransfersPage({ entries, loading, failed, prefs, setPrefs, archi
         <p className="eyebrow text-accent">Transfers</p>
         <h1 className="text-2xl text-ink sm:text-3xl">Transfer tracker</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-muted">
-          {win.open ? `The ${win.name} is open until ${fmtDay(win.closes)}.` : `Next: the ${win.name}, opening ${fmtDay(win.opens)}.`}{" "}
+          {win.open ? `The ${win.name} is open (${win.timing}; check the official deadline).` : `Next: the ${win.name}, which ${win.timing}.`}{" "}
           Built from the news feeds, so it only shows what outlets have actually reported.
         </p>
       </div>
