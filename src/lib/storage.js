@@ -65,3 +65,57 @@ export function mergeWithArchive(items) {
   writeJSON(ARCHIVE_KEY, merged.map(({ archived, ...rest }) => rest));
   return merged;
 }
+
+/* ───────────────────────── Personal data (this device only) ───────────────────────── */
+
+/** Players the user follows across the site: { [playerId]: { name, team, savedAt } } */
+export function useSavedPlayers() {
+  const [saved, setSaved] = usePersistentState("afc-players-v1", {});
+  const toggle = useCallback((p) => {
+    setSaved((s) => {
+      const next = { ...s };
+      if (next[p.id]) delete next[p.id];
+      else next[p.id] = { name: p.name, team: p.team ?? "men", savedAt: new Date().toISOString() };
+      return next;
+    });
+  }, [setSaved]);
+  return { saved, toggle, has: (id) => !!saved[id] };
+}
+
+/**
+ * Transfer watchlist: { [subjectKey]: { name, addedAt, status, seen: [links] } }.
+ * `status` and `seen` are the snapshot from the last time the user looked, so the
+ * Watchlist can say "status changed since you last checked" and flag new reports.
+ */
+export function useWatchlist() {
+  const [list, setList] = usePersistentState("afc-watchlist-v1", {});
+  const add = useCallback((entry) => {
+    setList((l) => (l[entry.key] ? l : {
+      ...l,
+      [entry.key]: { name: entry.name, addedAt: new Date().toISOString(), status: entry.status, seen: entry.links },
+    }));
+  }, [setList]);
+  const remove = useCallback((key) => setList((l) => { const n = { ...l }; delete n[key]; return n; }), [setList]);
+  const markSeen = useCallback((entry) => {
+    setList((l) => (l[entry.key] ? { ...l, [entry.key]: { ...l[entry.key], status: entry.status, seen: entry.links, checkedAt: new Date().toISOString() } } : l));
+  }, [setList]);
+  return { list, add, remove, markSeen, has: (key) => !!list[key] };
+}
+
+/** Fan predictions: { [matchId]: { result, home, away, scorer, madeAt, label } } — opinions, never forecasts. */
+export function usePredictions() {
+  const [preds, setPreds] = usePersistentState("afc-predictions-v1", {});
+  const save = useCallback((id, p) => setPreds((s) => ({ ...s, [id]: { ...p, madeAt: new Date().toISOString() } })), [setPreds]);
+  const clear = useCallback((id) => setPreds((s) => { const n = { ...s }; delete n[id]; return n; }), [setPreds]);
+  return { preds, save, clear };
+}
+
+/** Recently opened pages (players, matches, stories): newest first, capped. */
+export function useRecents() {
+  const [recents, setRecents] = usePersistentState("afc-recents-v1", []);
+  const push = useCallback((item) => {
+    setRecents((r) => (r[0]?.href === item.href ? r : [{ ...item, at: new Date().toISOString() }, ...r.filter((x) => x.href !== item.href)].slice(0, 12)));
+  }, [setRecents]);
+  const clear = useCallback(() => setRecents([]), [setRecents]);
+  return { recents, push, clear };
+}

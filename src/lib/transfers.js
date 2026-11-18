@@ -20,6 +20,7 @@ import { fold } from "./news.js";
 import { TIERS } from "./sources.js";
 
 export const STATUSES = {
+  dismissed: { label: "Dismissed", rank: 0, tone: "dismissed" },
   confirmed: { label: "Confirmed", rank: 7, tone: "confirmed" },
   done: { label: "Reported complete", rank: 6, tone: "strong" },
   advanced: { label: "Advanced talks", rank: 5, tone: "strong" },
@@ -28,7 +29,32 @@ export const STATUSES = {
   monitoring: { label: "Monitoring", rank: 2, tone: "weak" },
   speculation: { label: "Speculation", rank: 1, tone: "weak" },
 };
-const byRank = Object.fromEntries(Object.entries(STATUSES).map(([k, v]) => [v.rank, k]));
+const byRank = Object.fromEntries(Object.entries(STATUSES).filter(([k]) => k !== "dismissed").map(([k, v]) => [v.rank, k]));
+
+const DENIAL = /\b(dismiss\w*|denies|denied|rules? out|ruled out|happy at|not for sale|no intention|shuts? down|rejects?|squashes?)\b/;
+export const isDenial = (a) => DENIAL.test(fold(a.title));
+export const isHedged = (a) => RE.hedge.test(fold(a.title)) || SCARE_QUOTES.test(a.title);
+
+/** Stable key for a transfer subject (used by the watchlist). */
+export const subjectKey = (e) => fold(e.player?.name ?? e.subject ?? e.headline).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "|" + e.direction;
+
+/**
+ * Progression of reporting for one transfer storyline. Every point is a real
+ * article (outlet, date, link); its "stage" is read from that headline's wording
+ * and capped by the outlet's tier. Nothing is inferred or filled in.
+ */
+export function timelineOf(e) {
+  const arts = [...new Map([e, ...(e.related ?? [])].flatMap((x) => x.articles).map((a) => [a.link, a])).values()]
+    .sort((a, b) => (a.date ?? 0) - (b.date ?? 0));
+  return arts.map((a) => {
+    const level = articleLevel(a);
+    // Level 1 covers "just mentioned", hedged rumours and analysis; say which, instead of calling everything speculation.
+    let stage = level > 1 ? STATUSES[byRank[level]]?.label : isHedged(a) || a.tier === "opinion" ? "Speculation" : a.primary === "analysis" ? "Background / analysis" : "Mentioned";
+    if (isDenial(a)) stage = "Denied / dismissed";
+    else if (a.tier === "official" && level >= 6) stage = "Official confirmation";
+    return { date: a.date, source: a.source, tier: a.tier, journalist: a.journalist ?? null, title: a.title, link: a.link, stage };
+  });
+}
 
 export const DIRECTIONS = {
   incoming: "Incoming",
@@ -177,6 +203,9 @@ export function buildTransfers(stories, ctx = {}) {
     else if (rank >= 6) status = "done";
     // Contract stories phrased as "talks" read better as advanced/strong, never "interest".
     if (direction === "renewal" && status === "interest") status = "strong";
+    // A storyline whose most recent report is a denial (and which never reached "done") is dismissed.
+    const latest = [...arts].filter((a) => a.date).sort((a, b) => b.date - a.date)[0];
+    if (latest && isDenial(latest) && STATUSES[status].rank < 6) status = "dismissed";
 
     const reliableOutlets = [...new Set(arts.filter((a) => (TIERS[a.tier]?.rank ?? 0) >= TIERS.reliable.rank).map((a) => a.source))];
     const facts = reportedFacts(arts);

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Bookmark, BookmarkCheck, ChevronDown, ExternalLink, Layers, PlayCircle, Search, X } from "lucide-react";
-import { CATEGORIES, CATEGORY_SHORT, SORTS, freshness, inCategory } from "../lib/news.js";
+import { CATEGORIES, CATEGORY_SHORT, SORTS, freshness, inCategory, storyHaystack, storyMentions } from "../lib/news.js";
 import { TIERS } from "../lib/sources.js";
 import { fmtFull, timeAgo } from "../lib/format.js";
 import { Chips, EmptyState, ErrorState, Panel, Select, Skel, StaleBanner, Thumb, cx, useNow } from "./ui.jsx";
@@ -280,13 +280,21 @@ const passesSourceFilter = (story, f) =>
     : f === "reliable" ? ["official", "journalist", "reliable"].includes(story.tier)
       : story.tier !== "opinion";
 
-export function NewsPage({ stories, sources, load, bookmarks, prefs, setPrefs, query, setQuery }) {
+export function NewsPage({ stories, sources, load, bookmarks, prefs, setPrefs, query, setQuery, squad = [] }) {
   const now = useNow();
   const [limit, setLimit] = useState(20);
   const { arsenalNews, worldNews } = sources;
   const cat = prefs.newsCategory ?? "all";
   const sort = prefs.newsSort ?? "recent";
   const srcFilter = prefs.newsSources ?? "all";
+  const playerId = prefs.newsPlayer ?? "all";
+  // Only squad members who appear in the current stories are offered.
+  const playerOptions = useMemo(
+    () => [{ id: "all", label: "Any player" }, ...squad
+      .filter((p) => stories.some((s) => s.scope === "arsenal" && storyMentions(s, p.id)))
+      .map((p) => ({ id: p.id, label: p.name }))],
+    [squad, stories]
+  );
   const set = (k) => (v) => { setPrefs((p) => ({ ...p, [k]: v })); setLimit(20); };
 
   const filtered = useMemo(() => {
@@ -294,9 +302,10 @@ export function NewsPage({ stories, sources, load, bookmarks, prefs, setPrefs, q
     return stories
       .filter((s) => (cat === "saved" ? false : inCategory(s, cat)))
       .filter((s) => passesSourceFilter(s, srcFilter))
-      .filter((s) => !q || s.articles.some((a) => `${a.title} ${a.summary} ${a.source}`.toLowerCase().includes(q)))
+      .filter((s) => playerId === "all" || storyMentions(s, playerId))
+      .filter((s) => !q || q.split(/s+/).every((w) => storyHaystack(s).includes(w)))
       .sort(SORTS[sort].fn);
-  }, [stories, cat, sort, srcFilter, query]);
+  }, [stories, cat, sort, srcFilter, query, playerId]);
 
   const counts = useMemo(() => Object.fromEntries(CATEGORIES.map((c) => [c.id, stories.filter((s) => inCategory(s, c.id)).length])), [stories]);
   const savedList = Object.values(bookmarks.saved).sort((a, b) => (b.savedAt > a.savedAt ? 1 : -1));
@@ -325,7 +334,7 @@ export function NewsPage({ stories, sources, load, bookmarks, prefs, setPrefs, q
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search news"
+              placeholder="Search players, topics, competitions"
               aria-label="Search news"
               className="w-full rounded-full border border-line bg-surface py-1.5 pl-8 pr-8 text-sm text-ink placeholder:text-ink-muted focus:border-ink-muted focus:outline-none"
             />
@@ -335,6 +344,7 @@ export function NewsPage({ stories, sources, load, bookmarks, prefs, setPrefs, q
           </label>
           <Select label="Sort" value={sort} onChange={set("newsSort")} options={Object.entries(SORTS).map(([id, s]) => ({ id, label: s.label }))} />
           <Select value={srcFilter} onChange={set("newsSources")} options={SOURCE_FILTERS} />
+          {playerOptions.length > 1 && <Select value={playerOptions.some((o) => o.id === playerId) ? playerId : "all"} onChange={set("newsPlayer")} options={playerOptions} />}
         </div>
       </div>
 
@@ -379,5 +389,80 @@ export function NewsPage({ stories, sources, load, bookmarks, prefs, setPrefs, q
 
       <FeedStatus arsenalNews={arsenalNews} worldNews={worldNews} />
     </div>
+  );
+}
+
+/* ───────────────────────── Daily briefing ───────────────────────── */
+
+/** One briefing item: headline + one-line summary, expandable to every outlet that covered it. */
+function BriefingItem({ story, index, open, onToggle, bookmarks, now }) {
+  const a = story.lead;
+  return (
+    <li className="py-3.5">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand font-display text-xs font-bold text-white">{index}</span>
+        <div className="min-w-0 flex-1">
+          <CategoryTag cat={story.primary} />
+          <button onClick={onToggle} aria-expanded={open} className="block w-full text-left">
+            <h3 className="font-sans text-[15px] font-semibold leading-snug text-ink">{a.title}</h3>
+          </button>
+          {story.summary && <p className={cx("mt-1 text-[13px] leading-relaxed text-ink-muted", !open && "line-clamp-2")}>{story.summary}</p>}
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <Meta article={a} now={now} />
+            <button onClick={onToggle} className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
+              {open ? "Less" : "Expand"} <ChevronDown size={12} className={cx("transition", open && "rotate-180")} />
+            </button>
+          </div>
+          {open && (
+            <div className="mt-2 space-y-2">
+              <a href={a.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline">
+                Read at {a.source} <ExternalLink size={12} />
+              </a>
+              <Coverage story={story} now={now} />
+            </div>
+          )}
+        </div>
+        <BookmarkButton article={a} bookmarks={bookmarks} />
+      </div>
+    </li>
+  );
+}
+
+/** "Five things to know": the briefing list. Item 1 is also the homepage's top story. */
+export function BriefingList({ stories, bookmarks, now, skipFirst = false }) {
+  const [openId, setOpenId] = useState(null);
+  const list = skipFirst ? stories.slice(1) : stories;
+  if (!list.length) return null;
+  return (
+    <ol className="divide-y divide-line">
+      {list.map((s, i) => (
+        <BriefingItem key={s.id} story={s} index={i + (skipFirst ? 2 : 1)} open={openId === s.id}
+          onToggle={() => setOpenId((o) => (o === s.id ? null : s.id))} bookmarks={bookmarks} now={now} />
+      ))}
+    </ol>
+  );
+}
+
+/** Fan-site talk (r/Gunners, Arseblog), kept apart from reporting and labelled as opinion. */
+export function FanTalk({ stories, unavailable, now }) {
+  if (!stories.length) {
+    return <EmptyState>{unavailable ? "Fan sites (r/Gunners, Arseblog) aren’t responding right now." : "No fan-site posts in the feeds right now."}</EmptyState>;
+  }
+  return (
+    <ul className="divide-y divide-line">
+      {stories.map((s) => (
+        <li key={s.id} className="px-4 py-3">
+          <a href={s.lead.link} target="_blank" rel="noopener noreferrer" className="group block">
+            <p className="text-[13px] font-semibold leading-snug text-ink group-hover:text-accent">{s.lead.title}</p>
+          </a>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-ink-muted">
+            <span className="font-semibold text-ink">{s.lead.source}</span>
+            <TierBadge tier={s.tier} />
+            <span>{timeAgo(s.date, now)}</span>
+            {s.lead.discussion && <a href={s.lead.discussion} target="_blank" rel="noopener noreferrer" className="font-semibold text-accent hover:underline">Join the thread</a>}
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }

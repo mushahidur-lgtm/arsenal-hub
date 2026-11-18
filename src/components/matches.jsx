@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Activity, ArrowLeft, CalendarDays, Goal, MapPin, RefreshCw, Shield, ShieldCheck, Star, Target, Trophy,
 } from "lucide-react";
-import { TEAM_ID, fetchMatchSummary } from "../lib/data.js";
+import { TEAM_ID, WOMEN_ID, fetchMatchSummary } from "../lib/data.js";
+import { LineupPanel, MatchReport, PredictionBox } from "./pitch.jsx";
+import { TeamSwitch } from "./squad.jsx";
 import { fmtDay, fmtFull, fmtKick, fmtLongDay, fmtTime, ordinal, relDay, sameDay, signed, timeAgo, tzShort, userTz } from "../lib/format.js";
 import {
   Chips, CompBadge, Crest, EmptyState, ErrorState, Panel, ResultPill, SectionHead, Skel, SkeletonRows, SourceGate, StaleBanner, cx, useNow,
@@ -229,12 +231,12 @@ export function FormStrip({ results, n = 5, size = "h-7 w-7 text-xs" }) {
 
 const RIVALS = new Set(["367", "363", "360", "382", "364"]); // Spurs, Chelsea, Man Utd, Man City, Liverpool
 
-export function StandingsTable({ source, onRetry, mode = "around" }) {
+export function StandingsTable({ source, onRetry, mode = "around", teamId = TEAM_ID }) {
   const [full, setFull] = useState(mode === "full");
   return (
     <SourceGate source={source} onRetry={onRetry} skeleton={<SkeletonRows rows={5} />}>
       {({ rows, season }) => {
-        const idx = rows.findIndex((r) => r.id === TEAM_ID);
+        const idx = rows.findIndex((r) => r.id === teamId);
         let shown = rows;
         if (!full && idx >= 0) {
           const start = Math.max(0, Math.min(idx - 2, rows.length - 5));
@@ -258,7 +260,7 @@ export function StandingsTable({ source, onRetry, mode = "around" }) {
               </thead>
               <tbody>
                 {shown.map((r) => {
-                  const ars = r.id === TEAM_ID;
+                  const ars = r.id === teamId;
                   return (
                     <tr key={r.id} className={cx("border-t border-line", ars ? "bg-brand/[0.07] font-semibold text-ink" : "text-ink")} aria-current={ars ? "true" : undefined}>
                       <td className="relative py-2 pl-3 tabular-nums">
@@ -358,8 +360,13 @@ const COMP_FILTERS = [
 ];
 const compMatch = (m, f) => (f === "all" ? true : f === "friendly" ? m.friendly : m.leagueSlug === f);
 
-export function MatchCentrePage({ sources, load, prefs, setPrefs }) {
-  const { schedule, standings, team } = sources;
+export function MatchCentrePage({ sources, load, prefs, setPrefs, team = "men", ensure }) {
+  const womens = team === "women";
+  const schedule = womens ? sources.womenSchedule : sources.schedule;
+  const standings = womens ? sources.womenStandings : sources.standings;
+  const scheduleKey = womens ? "womenSchedule" : "schedule";
+  const standingsKey = womens ? "womenStandings" : "standings";
+  useEffect(() => { if (womens) { ensure?.("womenSchedule"); ensure?.("womenStandings"); } }, [womens]); // eslint-disable-line react-hooks/exhaustive-deps
   const comp = prefs.matchComp ?? "all";
   const setComp = (v) => setPrefs((p) => ({ ...p, matchComp: v }));
   const [resultsShown, setResultsShown] = useState(10);
@@ -372,11 +379,14 @@ export function MatchCentrePage({ sources, load, prefs, setPrefs }) {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
         <p className="eyebrow text-accent">Match Centre</p>
-        <h1 className="text-2xl text-ink sm:text-3xl">Fixtures, results & table</h1>
+          <h1 className="text-2xl text-ink sm:text-3xl">{womens ? "Arsenal Women" : "Arsenal Men"}: fixtures, results & table</h1>
+        </div>
+        <TeamSwitch team={team} hrefFor={(t) => (t === "women" ? "#/matches?team=women" : "#/matches")} />
       </div>
-      <NextMatchHero source={schedule} onRetry={() => load("schedule")} />
+      <NextMatchHero source={schedule} onRetry={() => load(scheduleKey)} />
       {schedule.warnings?.length > 0 && <p className="text-xs text-ink-muted">{schedule.warnings.join(" · ")}</p>}
 
       <Chips options={available} value={comp} onChange={setComp} />
@@ -385,7 +395,7 @@ export function MatchCentrePage({ sources, load, prefs, setPrefs }) {
         <section>
           <SectionHead title="Upcoming" />
           <Panel className="overflow-hidden">
-            <SourceGate source={schedule} onRetry={() => load("schedule")} skeleton={<SkeletonRows rows={5} />}>
+            <SourceGate source={schedule} onRetry={() => load(scheduleKey)} skeleton={<SkeletonRows rows={5} />}>
               {({ fixtures }) => <MatchList matches={fixtures.filter((m) => compMatch(m, comp))} empty="No upcoming fixtures in this competition yet." />}
             </SourceGate>
           </Panel>
@@ -396,7 +406,7 @@ export function MatchCentrePage({ sources, load, prefs, setPrefs }) {
             action={data && <FormStrip results={data.results} size="h-6 w-6 text-[11px]" />}
           />
           <Panel className="overflow-hidden">
-            <SourceGate source={schedule} onRetry={() => load("schedule")} skeleton={<SkeletonRows rows={5} />}>
+            <SourceGate source={schedule} onRetry={() => load(scheduleKey)} skeleton={<SkeletonRows rows={5} />}>
               {({ results }) => {
                 const list = results.filter((m) => compMatch(m, comp));
                 return (
@@ -418,13 +428,15 @@ export function MatchCentrePage({ sources, load, prefs, setPrefs }) {
 
       <div className="grid gap-6 lg:grid-cols-5">
         <section className="lg:col-span-3">
-          <SectionHead title="Premier League table" />
-          <Panel className="overflow-hidden"><StandingsTable source={standings} onRetry={() => load("standings")} mode="full" /></Panel>
+          <SectionHead title={womens ? "Women’s Super League table" : "Premier League table"} />
+          <Panel className="overflow-hidden"><StandingsTable source={standings} onRetry={() => load(standingsKey)} mode="full" teamId={womens ? WOMEN_ID : TEAM_ID} /></Panel>
         </section>
-        <section className="lg:col-span-2">
-          <SectionHead title="Season so far" />
-          <SeasonStats teamSrc={team} standingsSrc={standings} scheduleSrc={schedule} />
-        </section>
+        {!womens && (
+          <section className="lg:col-span-2">
+            <SectionHead title="Season so far" />
+            <SeasonStats teamSrc={sources.team} standingsSrc={standings} scheduleSrc={schedule} />
+          </section>
+        )}
       </div>
     </div>
   );
@@ -489,45 +501,20 @@ function StatBar({ s, homeId }) {
   );
 }
 
-function Lineup({ l }) {
-  return (
-    <div>
-      <p className="mb-2 flex items-baseline justify-between text-sm font-semibold text-ink">
-        {l.team} {l.formation && <span className="text-[11px] font-normal text-ink-muted">{l.formation}</span>}
-      </p>
-      <ol className="space-y-1 text-[13px]">
-        {l.starters.map((p) => (
-          <li key={p.id} className="flex items-center gap-2">
-            <span className="w-5 text-right text-[11px] tabular-nums text-ink-muted">{p.jersey}</span>
-            <span className="truncate text-ink">{p.name}</span>
-            <span className="text-[10px] text-ink-muted">{p.position}</span>
-            {p.subbedOut && <span className="ml-auto text-[10px] text-ink-muted" title="Substituted">↓</span>}
-          </li>
-        ))}
-      </ol>
-      {l.subs.length > 0 && (
-        <>
-          <p className="mb-1 mt-3 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Substitutes</p>
-          <ul className="space-y-0.5 text-[12px] text-ink-muted">
-            {l.subs.map((p) => (
-              <li key={p.id} className="flex items-center gap-2">
-                <span className="w-5 text-right tabular-nums">{p.jersey}</span>
-                <span className={cx("truncate", p.subbedIn && "font-semibold text-ink")}>{p.name}</span>
-                {p.subbedIn && <span className="text-[10px] text-emerald-700 dark:text-emerald-400">↑ on</span>}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </div>
-  );
-}
-
-export function MatchDetailPage({ id, schedule, stories, onRetrySchedule }) {
+export function MatchDetailPage({ id, schedules, stories, onRetrySchedule, ensure, predictions, squads }) {
+  const [menSchedule, womenSchedule] = schedules;
   const match = useMemo(() => {
-    const d = schedule.data;
-    return d ? [...d.fixtures, ...d.results].find((m) => String(m.id) === String(id)) : null;
-  }, [schedule.data, id]);
+    for (const s of schedules) {
+      const found = s.data && [...s.data.fixtures, ...s.data.results].find((x) => String(x.id) === String(id));
+      if (found) return found;
+    }
+    return null;
+  }, [id, menSchedule.data, womenSchedule.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Not one of the men's matches? Load the women's schedule and look there.
+  useEffect(() => { if (!match && menSchedule.data) ensure?.("womenSchedule"); }, [match, menSchedule.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const womensMatch = match?.ars?.id === WOMEN_ID;
+  useEffect(() => { if (womensMatch) ensure?.("womenRoster"); }, [womensMatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  const schedule = menSchedule;
   const [detail, setDetail] = useState({ status: "idle" });
 
   useEffect(() => {
@@ -549,7 +536,7 @@ export function MatchDetailPage({ id, schedule, stories, onRetrySchedule }) {
   }, [match?.id, match?.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!match) {
-    if (!schedule.data && schedule.status !== "error") return <SkeletonRows rows={6} />;
+    if (schedules.some((s) => !s.data && s.status !== "error")) return <SkeletonRows rows={6} />;
     return (
       <div className="space-y-3">
         <a href="#/matches" className="inline-flex items-center gap-1 text-sm font-semibold text-accent"><ArrowLeft size={14} /> Match Centre</a>
@@ -613,6 +600,11 @@ export function MatchDetailPage({ id, schedule, stories, onRetrySchedule }) {
       {detail.status === "loading" && !d && <SkeletonRows rows={6} avatar={false} />}
       {detail.status === "error" && !d && <ErrorState message={detail.error} title="Couldn’t load match details" />}
 
+      {d && match.state !== "pre" && <MatchReport match={match} detail={{ ...d, fetchedAt: detail.at }} related={related} />}
+      {match.state !== "post" || predictions?.preds?.[match.id] ? (
+        <PredictionBox match={match} predictions={predictions} squad={(womensMatch ? squads?.women : squads?.men) ?? []} events={d?.events} />
+      ) : null}
+
       {d && (
         <div className="grid gap-6 lg:grid-cols-2">
           <section>
@@ -626,7 +618,7 @@ export function MatchDetailPage({ id, schedule, stories, onRetrySchedule }) {
             </Panel>
           </section>
           <section>
-            <SectionHead title="Match stats" />
+            <SectionHead title="Match stats" action={match.state !== "pre" && <span className={cx("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", match.state === "in" ? "bg-brand text-white" : "bg-surface-2 text-ink-muted")}>{match.state === "in" ? "In progress · re-checked each minute" : "Final"}</span>} />
             <Panel className="space-y-3 p-4">
               {d.stats.length ? (
                 <>
@@ -645,7 +637,7 @@ export function MatchDetailPage({ id, schedule, stories, onRetrySchedule }) {
             <SectionHead title="Lineups" />
             <Panel className="p-4">
               {d.lineups.length ? (
-                <div className="grid gap-6 sm:grid-cols-2">{d.lineups.map((l) => <Lineup key={l.teamId} l={l} />)}</div>
+                <LineupPanel match={match} lineups={d.lineups} events={d.events} state={match.state} />
               ) : (
                 <EmptyState>{match.state === "pre" ? "Lineups are usually published about an hour before kick-off." : "Lineups weren’t published for this match."}</EmptyState>
               )}
@@ -654,7 +646,7 @@ export function MatchDetailPage({ id, schedule, stories, onRetrySchedule }) {
         </div>
       )}
 
-      {related.length > 0 && (
+      {match.state === "pre" && related.length > 0 && (
         <section>
           <SectionHead title="Related coverage" />
           <Panel className="divide-y divide-line px-4">

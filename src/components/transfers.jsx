@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, ChevronDown, FileSignature, Info, Newspaper } from "lucide-react";
-import { DIRECTIONS, STATUSES, windowInfo } from "../lib/transfers.js";
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, Eye, EyeOff, FileSignature, Info, Newspaper } from "lucide-react";
+import { DIRECTIONS, STATUSES, subjectKey, timelineOf, windowInfo } from "../lib/transfers.js";
 import { fmtDay, fmtFull, timeAgo } from "../lib/format.js";
 import { Chips, EmptyState, Panel, SectionHead, Skel, Thumb, cx, useNow } from "./ui.jsx";
 import { TierBadge } from "./news.jsx";
@@ -11,6 +11,7 @@ const STATUS_STYLE = {
   strong: "bg-ink text-surface",
   medium: "bg-surface-2 text-ink ring-1 ring-inset ring-line",
   weak: "border border-dashed border-ink-muted/40 text-ink-muted",
+  dismissed: "bg-surface-2 text-ink-muted line-through decoration-ink-muted/50",
 };
 
 export function StatusBadge({ status, className }) {
@@ -51,11 +52,64 @@ function Consensus({ e }) {
   );
 }
 
-function TransferCard({ e, now }) {
+const STAGE_DOT = {
+  "Official confirmation": "bg-emerald-600",
+  "Reported complete": "bg-emerald-500",
+  "Denied / dismissed": "bg-zinc-400",
+};
+
+/** Verified progression: one row per real article, oldest first, with the stage that headline's wording supports. */
+function Timeline({ entry }) {
+  const items = timelineOf(entry);
+  return (
+    <ol className="relative ml-1.5 space-y-3 border-l border-line pl-4">
+      {items.map((it) => (
+        <li key={it.link} className="relative">
+          <span className={cx("absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-surface", STAGE_DOT[it.stage] ?? "bg-ink-muted")} />
+          <p className="flex flex-wrap items-center gap-x-2 text-[11px] text-ink-muted">
+            <span className="font-semibold uppercase tracking-wide text-ink">{it.stage}</span>
+            <span>{it.date ? fmtDay(it.date) : ""}</span>
+          </p>
+          <a href={it.link} target="_blank" rel="noopener noreferrer" className="group block">
+            <p className="text-[13px] leading-snug text-ink group-hover:text-accent">{it.title}</p>
+            <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-muted">
+              <span className="font-semibold text-ink">{it.source}</span>
+              <TierBadge tier={it.tier} />
+              {it.journalist && <span>by {it.journalist}</span>}
+            </p>
+          </a>
+        </li>
+      ))}
+      <li className="text-[11px] text-ink-muted">Stages come from each headline’s wording and the outlet’s reliability. Only real articles are listed.</li>
+    </ol>
+  );
+}
+
+const linksOf = (entry) => [...new Set([entry, ...entry.related].flatMap((x) => x.articles).map((a) => a.link))];
+
+function WatchButton({ entry, watch, className }) {
+  if (!watch) return null;
+  const key = subjectKey(entry);
+  const on = watch.has(key);
+  return (
+    <button
+      onClick={() => (on ? watch.remove(key) : watch.add({ key, name: entry.player?.name ?? entry.headline, status: entry.status, links: linksOf(entry) }))}
+      aria-pressed={on}
+      title={on ? "Remove from watchlist" : "Add to watchlist"}
+      className={cx("inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition", on ? "border-brand bg-brand/10 text-accent" : "border-line text-ink-muted hover:text-ink", className)}
+    >
+      {on ? <EyeOff size={12} /> : <Eye size={12} />} {on ? "Watching" : "Watch"}
+    </button>
+  );
+}
+
+function TransferCard({ e, now, watch }) {
   const [open, setOpen] = useState(false);
   const p = e.player;
-  const articles = [e, ...e.related].flatMap((x) => x.articles);
-  const unique = [...new Map(articles.map((a) => [a.link, a])).values()].sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
+  const count = linksOf(e).length;
+  const item = watch?.list[subjectKey(e)];
+  const unseen = item ? linksOf(e).filter((l) => !item.seen.includes(l)).length : 0;
+  const changed = item && item.status !== e.status;
   return (
     <article className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
       <div className="flex items-start gap-3">
@@ -66,12 +120,13 @@ function TransferCard({ e, now }) {
               {DIR_ICON[e.direction]} {DIRECTIONS[e.direction]}
             </span>
             <StatusBadge status={e.status} />
+            {(changed || unseen > 0) && <span className="rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-semibold text-white">{changed ? "Status changed" : `${unseen} new`}</span>}
           </div>
           {p ? (
             <>
               <h3 className="mt-1 truncate text-base font-semibold text-ink">{p.name}</h3>
               <p className="truncate text-xs text-ink-muted">
-                {[p.position, p.age && `${p.age} yrs`, p.inSquad ? "Arsenal" : p.club && `Currently: ${p.club}`].filter(Boolean).join(" · ")}
+                {[p.position, p.age && `${p.age} yrs`, p.inSquad ? "Arsenal" : p.club ? `Currently: ${p.club}` : null].filter(Boolean).join(" · ")}
               </p>
             </>
           ) : (
@@ -110,31 +165,82 @@ function TransferCard({ e, now }) {
           <Consensus e={e} />
           <span title={e.updated ? fmtFull(e.updated) : ""}>Updated {e.updated ? timeAgo(e.updated, now) : "—"}</span>
         </div>
-        <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
-          className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
-          {open ? "Hide" : "Show"} {unique.length} report{unique.length > 1 ? "s" : ""} <ChevronDown size={12} className={cx("transition", open && "rotate-180")} />
-        </button>
-        {open && (
-          <ul className="space-y-2">
-            {unique.map((a) => (
-              <li key={a.link}>
-                <a href={a.link} target="_blank" rel="noopener noreferrer" className="group block">
-                  <p className="text-[13px] leading-snug text-ink group-hover:text-accent">{a.title}</p>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-muted">
-                    <span className="font-semibold text-ink">{a.source}</span>
-                    <TierBadge tier={a.tier} />
-                    {a.journalist && <span>by {a.journalist}</span>}
-                    {!a.journalist && a.author && <span>by {a.author}</span>}
-                    <span>{a.date ? fmtDay(a.date) : ""}</span>
-                    {a.cites?.length > 0 && <span className="italic">citing {a.cites.join(", ")}</span>}
-                  </p>
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
+            {open ? "Hide" : "Show"} timeline ({count} report{count > 1 ? "s" : ""}) <ChevronDown size={12} className={cx("transition", open && "rotate-180")} />
+          </button>
+          <WatchButton entry={e} watch={watch} />
+        </div>
+        {open && <Timeline entry={e} />}
       </div>
     </article>
+  );
+}
+
+/** One watched subject compared with what the user last saw: status change and new reports. */
+function Watchlist({ entries, watch, now }) {
+  const byKey = new Map(entries.map((e) => [subjectKey(e), e]));
+  const items = Object.entries(watch.list);
+  if (!items.length) {
+    return <Panel><EmptyState>Your watchlist is empty. Use “Watch” on any transfer card to follow it here. It is stored on this device only.</EmptyState></Panel>;
+  }
+  return (
+    <div className="space-y-3">
+      {items.map(([key, item]) => {
+        const entry = byKey.get(key);
+        if (!entry) {
+          return (
+            <Panel key={key} className="flex items-center justify-between gap-3 p-4">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-ink">{item.name}</p>
+                <p className="text-[12px] text-ink-muted">No recent reports in the feeds. Last status you saw: {STATUSES[item.status]?.label ?? item.status}.</p>
+              </div>
+              <button onClick={() => watch.remove(key)} className="shrink-0 text-xs font-semibold text-ink-muted hover:text-ink">Remove</button>
+            </Panel>
+          );
+        }
+        const links = linksOf(entry);
+        const fresh = links.filter((l) => !item.seen.includes(l));
+        const changed = item.status !== entry.status;
+        const latest = [entry, ...entry.related].flatMap((x) => x.articles).sort((a, b) => (b.date ?? 0) - (a.date ?? 0)).slice(0, 3);
+        return (
+          <Panel key={key} className="space-y-3 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink">{entry.player?.name ?? entry.headline}</p>
+                <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-ink-muted">
+                  <StatusBadge status={entry.status} />
+                  <span>{DIRECTIONS[entry.direction]}</span>
+                  <span>Updated {entry.updated ? timeAgo(entry.updated, now) : "—"}</span>
+                  <span>Watching since {fmtDay(new Date(item.addedAt))}</span>
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {(changed || fresh.length > 0) && (
+                  <button onClick={() => watch.markSeen({ key, status: entry.status, links })} className="rounded-full bg-brand px-3 py-1 text-[11px] font-semibold text-white hover:bg-crimson">Mark as seen</button>
+                )}
+                <button onClick={() => watch.remove(key)} className="rounded-full border border-line px-3 py-1 text-[11px] font-semibold text-ink-muted hover:bg-surface-2">Remove</button>
+              </div>
+            </div>
+            {changed && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+                Status changed since you last looked: {STATUSES[item.status]?.label ?? item.status} → {STATUSES[entry.status].label}
+              </p>
+            )}
+            {fresh.length > 0 && <p className="text-[12px] font-semibold text-accent">{fresh.length} new report{fresh.length > 1 ? "s" : ""} since you last looked</p>}
+            <ul className="space-y-1.5">
+              {latest.map((a) => (
+                <li key={a.link}>
+                  <a href={a.link} target="_blank" rel="noopener noreferrer" className="block text-[13px] leading-snug text-ink hover:text-accent">
+                    {a.title} <span className="text-[11px] text-ink-muted">· {a.source}, {a.date ? timeAgo(a.date, now) : ""}{fresh.includes(a.link) ? " · new" : ""}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        );
+      })}
+    </div>
   );
 }
 
@@ -158,6 +264,7 @@ const STATUS_FILTERS = [
   { id: "all", label: "Any status" },
   { id: "confirmed", label: "Confirmed" },
   { id: "rumour", label: "Rumours & reports" },
+  { id: "dismissed", label: "Dismissed" },
 ];
 const POS_FILTERS = [
   { id: "all", label: "Any position" },
@@ -171,21 +278,31 @@ const QUALITY_FILTERS = [
   { id: "reliable", label: "Reliable outlets only" },
 ];
 
-export function TransfersPage({ entries, loading, failed, prefs, setPrefs, archiveDays }) {
+export function TransfersPage({ entries, loading, failed, prefs, setPrefs, archiveDays, watch }) {
   const now = useNow();
   const f = { dir: "all", status: "all", pos: "all", quality: "all", ...(prefs.transferFilters ?? {}) };
   const set = (k) => (v) => setPrefs((p) => ({ ...p, transferFilters: { ...f, [k]: v } }));
   const win = windowInfo(new Date(now));
+  const watching = f.dir === "watchlist";
+  const watchCount = Object.keys(watch?.list ?? {}).length;
+  const newInWatch = useMemo(() => entries.filter((e) => {
+    const it = watch?.list[subjectKey(e)];
+    return it && (it.status !== e.status || linksOf(e).some((l) => !it.seen.includes(l)));
+  }).length, [entries, watch?.list]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => entries
     .filter((e) => f.dir === "all" || e.direction === f.dir)
-    .filter((e) => f.status === "all" || (f.status === "confirmed" ? e.status === "confirmed" : e.status !== "confirmed"))
+    .filter((e) => f.status === "all" || (f.status === "confirmed" ? e.status === "confirmed" : f.status === "dismissed" ? e.status === "dismissed" : e.status !== "confirmed" && e.status !== "dismissed"))
     .filter((e) => f.pos === "all" || positionGroup(e.player) === f.pos)
     .filter((e) => f.quality === "all" || e.reliableOutlets.length > 0)
     .sort((a, b) => STATUSES[b.status].rank - STATUSES[a.status].rank || (b.updated ?? 0) - (a.updated ?? 0)),
   [entries, f.dir, f.status, f.pos, f.quality]);
 
   const count = (pred) => entries.filter(pred).length;
+  const dirOptions = [
+    ...DIR_FILTERS.map((d) => ({ ...d, count: d.id === "all" ? entries.length : count((e) => e.direction === d.id) })),
+    { id: "watchlist", label: newInWatch ? `Watchlist · ${newInWatch} new` : "Watchlist", count: watchCount },
+  ];
   return (
     <div className="space-y-6">
       <div>
@@ -199,12 +316,13 @@ export function TransfersPage({ entries, loading, failed, prefs, setPrefs, archi
 
       <section>
         <SectionHead title="Activity overview" />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <OverviewStat label="Confirmed arrivals" value={count((e) => e.direction === "incoming" && e.status === "confirmed")} tone="text-emerald-700 dark:text-emerald-400" />
           <OverviewStat label="Confirmed departures" value={count((e) => e.direction === "outgoing" && e.status === "confirmed")} tone="text-accent" />
-          <OverviewStat label="Rumoured targets" value={count((e) => e.direction === "incoming" && e.status !== "confirmed")} tone="text-ink" />
-          <OverviewStat label="Linked with exits" value={count((e) => e.direction === "outgoing" && e.status !== "confirmed")} tone="text-ink" />
+          <OverviewStat label="Rumoured targets" value={count((e) => e.direction === "incoming" && e.status !== "confirmed" && e.status !== "dismissed")} tone="text-ink" />
+          <OverviewStat label="Linked with exits" value={count((e) => e.direction === "outgoing" && e.status !== "confirmed" && e.status !== "dismissed")} tone="text-ink" />
           <OverviewStat label="Contract stories" value={count((e) => e.direction === "renewal")} tone="text-navy-ink" />
+          <OverviewStat label="Dismissed rumours" value={count((e) => e.status === "dismissed")} tone="text-ink-muted" />
         </div>
         <p className="mt-2 text-[11px] text-ink-muted">
           Counts cover stories from the last {archiveDays} days that this device has seen. Players named only in passing are listed under “Window news”, not as targets.
@@ -212,20 +330,24 @@ export function TransfersPage({ entries, loading, failed, prefs, setPrefs, archi
       </section>
 
       <div className="space-y-2">
-        <Chips options={DIR_FILTERS.map((d) => ({ ...d, count: d.id === "all" ? entries.length : count((e) => e.direction === d.id) }))} value={f.dir} onChange={set("dir")} />
-        <div className="flex flex-wrap gap-2">
-          <Chips options={STATUS_FILTERS} value={f.status} onChange={set("status")} className="sm:flex-nowrap" />
-          <Chips options={POS_FILTERS} value={f.pos} onChange={set("pos")} className="sm:flex-nowrap" />
-          <Chips options={QUALITY_FILTERS} value={f.quality} onChange={set("quality")} className="sm:flex-nowrap" />
-        </div>
+        <Chips options={dirOptions} value={f.dir} onChange={set("dir")} />
+        {!watching && (
+          <div className="flex flex-wrap gap-2">
+            <Chips options={STATUS_FILTERS} value={f.status} onChange={set("status")} className="sm:flex-nowrap" />
+            <Chips options={POS_FILTERS} value={f.pos} onChange={set("pos")} className="sm:flex-nowrap" />
+            <Chips options={QUALITY_FILTERS} value={f.quality} onChange={set("quality")} className="sm:flex-nowrap" />
+          </div>
+        )}
       </div>
 
-      {loading ? (
+      {watching ? (
+        <Watchlist entries={entries} watch={watch} now={now} />
+      ) : loading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 6 }).map((_, i) => <Skel key={i} className="h-48 rounded-xl" />)}</div>
       ) : failed && !entries.length ? (
         <Panel><EmptyState>News feeds are unavailable right now, so there are no transfer reports to show.</EmptyState></Panel>
       ) : filtered.length ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{filtered.map((e) => <TransferCard key={e.id} e={e} now={now} />)}</div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{filtered.map((e) => <TransferCard key={e.id} e={e} now={now} watch={watch} />)}</div>
       ) : (
         <Panel><EmptyState>No transfer reports match these filters.</EmptyState></Panel>
       )}
@@ -239,11 +361,13 @@ export function TransfersPage({ entries, loading, failed, prefs, setPrefs, archi
           <li><StatusBadge status="strong" /> A reliable outlet reports bids, offers or negotiations.</li>
           <li><StatusBadge status="interest" /> Interest reported. Secondary outlets can’t go higher than this.</li>
           <li><StatusBadge status="monitoring" /> Monitoring or scouting.</li>
-          <li><StatusBadge status="speculation" /> Fan sites, hedged wording (“could”, “claims”, quoted rumours), or denials.</li>
+          <li><StatusBadge status="speculation" /> Fan sites or hedged wording (“could”, “claims”, quoted rumours).</li>
+          <li><StatusBadge status="dismissed" /> The most recent report is a denial or the player ruling it out.</li>
         </ul>
         <p className="mt-3 text-[12px]">
-          Outlets that cite another outlet’s report aren’t counted as independent. Fees and contract lengths appear only when an outlet states them.
-          Player details come from ESPN: the Arsenal squad list, or a single exact-name search match for targets. When there’s no match, no player card is shown.
+          Outlets that cite another outlet’s report aren’t counted as independent. No confidence percentages are shown: there isn’t enough data to calculate one defensibly.
+          Fees and contract lengths appear only when an outlet states them. Destination clubs for departures aren’t extracted, because headlines rarely state them unambiguously.
+          Player details come from ESPN: the Arsenal squad list, or a single exact-name search match for targets.
         </p>
       </details>
     </div>
@@ -253,7 +377,7 @@ export function TransfersPage({ entries, loading, failed, prefs, setPrefs, archi
 /** Homepage: the most significant transfer items. */
 export function TransferWatch({ entries, limit = 4, unavailable }) {
   const top = [...entries]
-    .filter((e) => e.direction !== "general" || e.reliableOutlets.length)
+    .filter((e) => e.status !== "dismissed" && (e.direction !== "general" || e.reliableOutlets.length))
     .sort((a, b) => STATUSES[b.status].rank - STATUSES[a.status].rank || (b.updated ?? 0) - (a.updated ?? 0))
     .slice(0, limit);
   if (!top.length) return <EmptyState>{unavailable ? "News feeds unavailable." : "No transfer reports in the feeds right now."}</EmptyState>;

@@ -11,6 +11,7 @@ import { parseEspnNews, parseRss2Json, parseRssXml } from "./feeds.js";
 import { fold } from "./news.js";
 import { mergeWithArchive, readJSON, writeJSON } from "./storage.js";
 
+export const WOMEN_ID = "19973";
 export { TEAM_ID };
 
 const ESPN = "https://site.api.espn.com/apis/site/v2/sports/soccer";
@@ -25,6 +26,12 @@ export const URLS = {
   leagueNews: `${ESPN}/eng.1/news`,
   uclNews: `${ESPN}/uefa.champions/news`,
   arsenalEspnNews: `${ESPN}/eng.1/news?team=${TEAM_ID}`,
+  womenRoster: `${ESPN}/eng.w.1/teams/${WOMEN_ID}/roster`,
+  womenScheduleAll: `${ESPN}/all/teams/${WOMEN_ID}/schedule`,
+  womenScheduleLeague: `${ESPN}/eng.w.1/teams/${WOMEN_ID}/schedule`,
+  womenStandings: "https://site.web.api.espn.com/apis/v2/sports/soccer/eng.w.1/standings",
+  playerStats: (id, team, league) => `https://site.web.api.espn.com/apis/common/v3/sports/soccer/athletes/${id}/stats?team=${team}${league ? `&league=${league}` : ""}`,
+  playerBio: (id) => `https://site.web.api.espn.com/apis/common/v3/sports/soccer/athletes/${id}/bio`,
   summary: (league, id) => `${ESPN}/${league || "all"}/summary?event=${id}`,
   athlete: (id) => `https://site.web.api.espn.com/apis/common/v3/sports/soccer/athletes/${id}`,
   search: (q) =>`https://site.web.api.espn.com/apis/search/v2?query=${encodeURIComponent(q)}&limit=5`,
@@ -69,7 +76,7 @@ async function fetchOnce(url, timeoutMs, as = "json") {
 }
 
 /** Fetch with no caching; retry through a CORS proxy on network/CORS failure. */
-export async function fetchJSON(url, { timeoutMs = 12000, proxy = true, as = "json" } = {}) {
+async function fetchRaw(url, { timeoutMs = 12000, proxy = true, as = "json" } = {}) {
   try {
     return await fetchOnce(url, timeoutMs, as);
   } catch (err) {
@@ -81,6 +88,28 @@ export async function fetchJSON(url, { timeoutMs = 12000, proxy = true, as = "js
     }
     throw new FetchError(`${err.message}; CORS proxies also unavailable`, err.kind);
   }
+}
+
+/**
+ * Every request goes through here: identical in-flight requests are shared and
+ * successful responses are reused for 30s, so two components asking for the
+ * same URL (or a double render) cost one network call. `clearMemo()` is called
+ * by the Refresh button so a manual refresh always hits the network.
+ */
+const inflight = new Map();
+const memo = new Map();
+const MEMO_MS = 30e3;
+export const clearMemo = () => memo.clear();
+export function fetchJSON(url, opts = {}) {
+  const key = `${opts.as ?? "json"}|${url}`;
+  const hit = memo.get(key);
+  if (hit && Date.now() - hit.at < MEMO_MS) return Promise.resolve(hit.v);
+  if (inflight.has(key)) return inflight.get(key);
+  const p = fetchRaw(url, opts)
+    .then((v) => { memo.set(key, { v, at: Date.now() }); return v; })
+    .finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
 }
 
 const MAX_RAW_ITEMS = 25;
@@ -131,6 +160,10 @@ const COMPETITIONS = {
   "eng.league_cup": { name: "Carabao Cup", short: "Carabao" },
   "uefa.europa": { name: "Europa League", short: "UEL" },
   "eng.charity": { name: "Community Shield", short: "Shield" },
+  "eng.w.1": { name: "Women's Super League", short: "WSL" },
+  "uefa.wchampions": { name: "Women's Champions League", short: "UWCL" },
+  "eng.w.fa_cup": { name: "Women's FA Cup", short: "WFA Cup" },
+  "eng.w.league_cup": { name: "Women's League Cup", short: "WLC" },
 };
 export const isFriendlySlug = (slug = "") => /friendly|emirates_cup|club\.|preseason/i.test(slug);
 
@@ -140,7 +173,7 @@ export function competitionOf(slug, fallback) {
   return { name: fallback || "Match", short: fallback || "Match" };
 }
 
-export function parseEvent(e) {
+export function parseEvent(e, teamId = TEAM_ID) {
   const comp = e.competitions?.[0] ?? {};
   const status = comp.status?.type ?? e.status?.type ?? {};
   const sides = (comp.competitors ?? []).map((c) => ({
@@ -153,8 +186,8 @@ export function parseEvent(e) {
     score: num(c.score),
     shootout: num(c.shootoutScore),
   }));
-  const ars = sides.find((s) => s.id === TEAM_ID);
-  const opp = sides.find((s) => s.id !== TEAM_ID);
+  const ars = sides.find((s) => s.id === teamId);
+  const opp = sides.find((s) => s.id !== teamId);
   const home = sides.find((s) => s.homeAway === "home") ?? sides[0];
   const away = sides.find((s) => s.homeAway === "away") ?? sides[1];
   const state = status.state ?? "pre"; // pre | in | post
@@ -186,9 +219,9 @@ export function parseEvent(e) {
   };
 }
 
-export function parseSchedules(jsons) {
+export function parseSchedules(jsons, teamId = TEAM_ID) {
   const byId = new Map();
-  for (const j of jsons) for (const e of j?.events ?? []) byId.set(e.id, parseEvent(e));
+  for (const j of jsons) for (const e of j?.events ?? []) byId.set(e.id, parseEvent(e, teamId));
   const all = [...byId.values()];
   const results = all.filter((m) => m.state === "post" && !m.postponed).sort((a, b) => b.date - a.date);
   const fixtures = all.filter((m) => m.state !== "post").sort((a, b) => a.date - b.date);
@@ -198,12 +231,16 @@ export function parseSchedules(jsons) {
 function availabilityOf(athlete) {
   const inj = athlete.injuries?.[0];
   const raw = `${inj?.status ?? ""} ${inj?.type?.description ?? ""} ${inj?.details?.type ?? ""}`.toLowerCase();
+  // ESPN's injury entry sometimes carries a date; keep it so the UI can say when the report was filed.
+  const updated = inj?.date ? new Date(inj.date) : null;
+  const base = { source: "ESPN injury report", updated: updated && !Number.isNaN(updated.getTime()) ? updated : null };
   if (inj) {
-    if (/questionable|doubt|day-to-day|probable/.test(raw)) return { key: "doubtful", label: "Doubtful", detail: inj.details?.type || inj.status };
-    return { key: "injured", label: "Injured", detail: inj.details?.type || inj.status || "Injury" };
+    if (/suspend/.test(raw)) return { ...base, key: "suspended", label: "Suspended" };
+    if (/questionable|doubt|day-to-day|probable/.test(raw)) return { ...base, key: "doubtful", label: "Doubtful", detail: inj.details?.type || inj.status };
+    return { ...base, key: "injured", label: "Injured", detail: inj.details?.type || inj.status || "Injury" };
   }
-  if (athlete.suspended || /suspend/i.test(athlete.status?.name ?? "")) return { key: "injured", label: "Suspended" };
-  return { key: "available", label: "Available" };
+  if (athlete.suspended || /suspend/i.test(athlete.status?.name ?? "")) return { key: "suspended", label: "Suspended", source: "ESPN" };
+  return { key: "available", label: "Available", source: "ESPN: no injury listed" };
 }
 
 export function parseRoster(json) {
@@ -228,6 +265,11 @@ export function parseRoster(json) {
       group: groupOf(a.position),
       age: a.age,
       nationality: a.citizenship,
+      dob: a.dateOfBirth ? new Date(a.dateOfBirth) : null,
+      birthPlace: [a.birthPlace?.city, a.birthPlace?.country].filter(Boolean).join(", ") || null,
+      height: a.displayHeight ?? null,
+      weight: a.displayWeight ?? null,
+      season: json?.season?.displayName ?? null,
       flag: a.flag?.href,
       photo: a.headshot?.href || `https://a.espncdn.com/i/headshots/soccer/players/full/${a.id}.png`,
       link: a.links?.find((l) => l.rel?.includes("playercard"))?.href,
@@ -331,6 +373,16 @@ export function parseSummary(json) {
     stats,
     lineups,
     events,
+    // Top performer per stat category per team, as published by ESPN (the summary text can include per-player xG).
+    leaders: (json?.leaders ?? []).map((l) => ({
+      teamId: String(l.team?.id),
+      items: (l.leaders ?? []).flatMap((c) => (c.leaders ?? []).slice(0, 1).map((x) => ({
+        label: c.displayName, value: x.displayValue, name: x.athlete?.displayName, detail: x.summary ?? null,
+      }))).filter((x) => x.name),
+    })).filter((l) => l.items.length),
+    recap: json?.article?.headline
+      ? { headline: json.article.headline, description: json.article.description ?? "", link: json.article.links?.web?.href ?? null, source: "ESPN" }
+      : null,
     attendance: json?.gameInfo?.attendance ?? null,
     referee: json?.gameInfo?.officials?.[0]?.displayName ?? null,
     venue: json?.gameInfo?.venue?.fullName ?? null,
@@ -343,8 +395,11 @@ function rosterPlayer(p) {
     name: p.athlete?.displayName,
     jersey: p.jersey,
     position: p.position?.abbreviation ?? "",
+    positionName: p.position?.displayName ?? "",
+    place: p.formationPlace ? Number(p.formationPlace) : null,
     subbedIn: !!p.subbedIn,
     subbedOut: !!p.subbedOut,
+    stats: Object.fromEntries((p.stats ?? []).map((s) => [s.name, num(s.value)])),
   };
 }
 
@@ -431,6 +486,17 @@ export const LOADERS = {
   roster: async () => ({ data: parseRoster(await fetchJSON(URLS.roster)) }),
   standings: async () => ({ data: parseStandings(await fetchJSON(URLS.standings)) }),
   team: async () => ({ data: parseTeam(await fetchJSON(URLS.team)) }),
+  // Women's team: loaded on demand (see LAZY_SOURCES), kept entirely separate from the men's data.
+  womenRoster: async () => ({ data: parseRoster(await fetchJSON(URLS.womenRoster)) }),
+  womenSchedule: async () => {
+    const tryPair = (base) => Promise.all([fetchJSON(base), fetchJSON(`${base}?fixture=true`)]);
+    try {
+      return { data: parseSchedules(await tryPair(URLS.womenScheduleAll), WOMEN_ID) };
+    } catch {
+      return { data: parseSchedules(await tryPair(URLS.womenScheduleLeague), WOMEN_ID), warnings: ["Showing Women's Super League matches only"] };
+    }
+  },
+  womenStandings: async () => ({ data: parseStandings(await fetchJSON(URLS.womenStandings)) }),
   arsenalNews: async () => {
     const list = [
       ...ARSENAL_FEEDS.map((id) => [id, () => fetchFeed(id, "arsenal")]),
@@ -458,6 +524,9 @@ export const LOADERS = {
 // from schedule + standings, so it's treated as optional enrichment: it never
 // blocks the "refreshing" state and never counts as a failed source.
 export const OPTIONAL_SOURCES = new Set(["team"]);
+
+// Only fetched once a page that needs them is opened.
+export const LAZY_SOURCES = new Set(["womenRoster", "womenSchedule", "womenStandings"]);
 
 /* ────────────────────────────── Cache ────────────────────────────── */
 
@@ -502,6 +571,7 @@ export function useHubData() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const lastRefresh = useRef(0);
+  const activated = useRef(new Set());
 
   const load = useCallback(async (key) => {
     setSources((s) => ({ ...s, [key]: { ...s[key], status: s[key].data ? "refreshing" : "loading", error: null } }));
@@ -518,10 +588,18 @@ export function useHubData() {
     }
   }, []);
 
+  /** Start loading an on-demand source the first time a page needs it. */
+  const ensure = useCallback((key) => {
+    if (activated.current.has(key)) return;
+    activated.current.add(key);
+    load(key);
+  }, [load]);
+
   const refreshAll = useCallback(async () => {
     setRefreshing(true);
     lastRefresh.current = Date.now();
-    const keys = Object.keys(LOADERS);
+    clearMemo();
+    const keys = Object.keys(LOADERS).filter((k) => !LAZY_SOURCES.has(k) || activated.current.has(k));
     keys.filter((k) => OPTIONAL_SOURCES.has(k)).forEach(load); // fire and forget
     const results = await Promise.all(keys.filter((k) => !OPTIONAL_SOURCES.has(k)).map(load));
     // "Last refreshed" means data actually arrived, not just that we tried.
@@ -563,5 +641,5 @@ export function useHubData() {
     return () => clearInterval(id);
   }, [matchWindow, load]);
 
-  return { sources, load, refreshAll, refreshing, lastUpdated, matchWindow };
+  return { sources, load, ensure, refreshAll, refreshing, lastUpdated, matchWindow };
 }

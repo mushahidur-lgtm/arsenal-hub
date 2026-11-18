@@ -1,25 +1,28 @@
 /**
- * Arsenal Hub: a daily Arsenal briefing.
+ * Arsenal Hub: a daily Arsenal platform.
  *
  * App shell: hash routing (works on GitHub Pages with no server config),
- * header + mobile bottom nav, search, theme, and the homepage. Data loading
- * lives in lib/data.js; news intelligence in lib/news.js; transfers in
- * lib/transfers.js. Pages live in components/.
+ * header + mobile bottom nav, unified search, theme, and the homepage. Data
+ * loading lives in lib/data.js; news intelligence in lib/news.js; transfers in
+ * lib/transfers.js; per-player stats in lib/playerstats.js. Pages live in components/.
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowRight, CalendarDays, Home, Moon, Newspaper, RefreshCw, Repeat, Search, Sun, Users, X,
+  AlertTriangle, ArrowRight, BarChart3, CalendarDays, Home, Landmark, MoreHorizontal, Moon, Newspaper, RefreshCw, Repeat, Search, Sun, Users, X,
 } from "lucide-react";
 import { TEAM_ID, lookupPlayers, useHubData } from "./lib/data.js";
-import { buildStories, pickFeatured, playerKeys } from "./lib/news.js";
+import { buildStories, fanTalk, pickBriefing, playerKeys } from "./lib/news.js";
 import { buildTransfers, namesToLookUp } from "./lib/transfers.js";
-import { readJSON, useBookmarks, usePersistentState } from "./lib/storage.js";
+import { searchHistory } from "./lib/history.js";
+import { readJSON, useBookmarks, usePersistentState, usePredictions, useRecents, useSavedPlayers, useWatchlist } from "./lib/storage.js";
 import { fmtLongDay, fmtTime, relDay, sameDay, timeAgo } from "./lib/format.js";
 import { Chips, Crest, EmptyState, Panel, SectionHead, cx, useNow } from "./components/ui.jsx";
-import { FeaturedSkeleton, FeaturedStory, NewsPage, StoryListSkeleton, StoryRow } from "./components/news.jsx";
+import { BriefingList, FanTalk, FeaturedSkeleton, FeaturedStory, NewsPage, StoryListSkeleton, StoryRow } from "./components/news.jsx";
 import { FormStrip, MatchCentrePage, MatchDetailPage, MatchList, NextMatchHero, StandingsTable } from "./components/matches.jsx";
-import { AvailabilityList, PlayerAvatar, SquadPage } from "./components/squad.jsx";
+import { AvailabilityList, PlayerAvatar, PlayerProfilePage, SquadPage } from "./components/squad.jsx";
 import { TransferWatch, TransfersPage } from "./components/transfers.jsx";
+import { ComparePage } from "./components/analysis.jsx";
+import { HistoryPage } from "./components/history.jsx";
 
 const CREST = `https://a.espncdn.com/i/teamlogos/soccer/500/${TEAM_ID}.png`;
 const ARCHIVE_DAYS = 21;
@@ -27,21 +30,24 @@ const ARCHIVE_DAYS = 21;
 /* ───────────────────────── Routing ───────────────────────── */
 
 const NAV = [
-  { id: "home", label: "Home", href: "#/", icon: Home },
-  { id: "news", label: "News", href: "#/news", icon: Newspaper },
-  { id: "matches", label: "Matches", href: "#/matches", icon: CalendarDays },
-  { id: "transfers", label: "Transfers", href: "#/transfers", icon: Repeat },
-  { id: "squad", label: "Squad", href: "#/squad", icon: Users },
+  { id: "home", label: "Home", href: "#/", icon: Home, primary: true },
+  { id: "news", label: "News", href: "#/news", icon: Newspaper, primary: true },
+  { id: "matches", label: "Matches", href: "#/matches", icon: CalendarDays, primary: true },
+  { id: "transfers", label: "Transfers", href: "#/transfers", icon: Repeat, primary: true },
+  { id: "squad", label: "Squad", href: "#/squad", icon: Users, primary: true },
+  { id: "analysis", label: "Analysis", href: "#/analysis", icon: BarChart3 },
+  { id: "history", label: "History", href: "#/history", icon: Landmark },
 ];
 
 function parseHash() {
   const raw = window.location.hash.replace(/^#\/?/, "");
   const [path, qs] = raw.split("?");
-  const [page = "", param] = path.split("/");
-  const known = NAV.some((n) => n.id === page);
-  // Legacy tab ids from the previous version of the site
-  const legacy = { overview: "home", fixtures: "matches", stats: "matches" }[page];
-  return { page: legacy ?? (known ? page : "home"), param: param ? decodeURIComponent(param) : null, query: new URLSearchParams(qs ?? "") };
+  const parts = path.split("/").filter(Boolean).map((p) => decodeURIComponent(p));
+  const first = parts[0] ?? "";
+  // Legacy tab ids from earlier versions of the site
+  const legacy = { overview: "home", fixtures: "matches", stats: "matches" }[first];
+  const page = legacy ?? (NAV.some((n) => n.id === first) ? first : "home");
+  return { page, parts: parts.slice(1), query: new URLSearchParams(qs ?? "") };
 }
 
 function useRoute() {
@@ -90,9 +96,9 @@ function useIntelligence(s) {
     Object.fromEntries(Object.entries(readJSON("afc-player-lookup-v2", {})).filter(([, v]) => !v.miss))
   );
   useEffect(() => {
-    if (!stories.length) return;
+    if (!stories.length) return undefined;
     const names = namesToLookUp(stories, keys);
-    if (!names.length) return;
+    if (!names.length) return undefined;
     let cancelled = false;
     lookupPlayers(names).then((l) => !cancelled && setLookups(l)).catch(() => {});
     return () => { cancelled = true; };
@@ -132,18 +138,17 @@ function Header({ route, dark, setDark, onRefresh, refreshing, openSearch, sourc
           <img src={CREST} alt="" width="28" height="28" className="h-7 w-7" />
           <span className="font-display text-[17px] font-bold tracking-tight">Arsenal <span className="text-accent">Hub</span></span>
         </a>
-        <nav className="ml-6 hidden items-center gap-1 md:flex" aria-label="Main">
+        <nav className="ml-4 hidden items-center gap-0.5 lg:flex" aria-label="Main">
           {NAV.map((n) => (
             <a key={n.id} href={n.href} aria-current={route.page === n.id ? "page" : undefined}
-              className={cx("relative rounded-md px-3 py-2 text-sm font-semibold transition",
-                route.page === n.id ? "text-accent" : "text-ink-muted hover:text-ink")}>
+              className={cx("relative rounded-md px-2.5 py-2 text-sm font-semibold transition", route.page === n.id ? "text-accent" : "text-ink-muted hover:text-ink")}>
               {n.label}
-              {route.page === n.id && <span className="absolute inset-x-3 -bottom-[11px] h-0.5 rounded-full bg-brand" />}
+              {route.page === n.id && <span className="absolute inset-x-2.5 -bottom-[11px] h-0.5 rounded-full bg-brand" />}
             </a>
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-1">
-          <span className="mr-2 hidden text-[11px] text-ink-muted lg:block">
+          <span className="mr-2 hidden text-[11px] text-ink-muted xl:block">
             <Freshness sources={sources} lastUpdated={lastUpdated} refreshing={refreshing} />
           </span>
           <button onClick={openSearch} aria-label="Search" title="Search (/)" className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-surface-2 hover:text-ink">
@@ -163,26 +168,50 @@ function Header({ route, dark, setDark, onRefresh, refreshing, openSearch, sourc
   );
 }
 
+/** Five primary destinations plus a "More" sheet (Analysis, History), so nothing is cramped on a phone. */
 function BottomNav({ route }) {
+  const [more, setMore] = useState(false);
+  useEffect(() => setMore(false), [route]);
+  const primary = NAV.filter((n) => n.primary);
+  const secondary = NAV.filter((n) => !n.primary);
+  const moreActive = secondary.some((n) => n.id === route.page);
   return (
-    <nav className="bottom-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur md:hidden" aria-label="Main">
-      <div className="mx-auto grid max-w-md grid-cols-5">
-        {NAV.map(({ id, label, href, icon: Icon }) => {
-          const active = route.page === id;
-          return (
-            <a key={id} href={href} aria-current={active ? "page" : undefined}
-              className={cx("flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold", active ? "text-accent" : "text-ink-muted")}>
-              <Icon size={20} strokeWidth={active ? 2.4 : 2} />
-              {label}
-            </a>
-          );
-        })}
-      </div>
-    </nav>
+    <>
+      {more && <button className="fixed inset-0 z-20 cursor-default bg-black/20 lg:hidden" onClick={() => setMore(false)} aria-label="Close menu" />}
+      <nav className="bottom-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur lg:hidden" aria-label="Main">
+        {more && (
+          <div className="absolute inset-x-3 bottom-full mb-2 overflow-hidden rounded-xl border border-line bg-surface shadow-xl">
+            {secondary.map(({ id, label, href, icon: Icon }) => (
+              <a key={id} href={href} className={cx("flex items-center gap-3 px-4 py-3 text-sm font-semibold hover:bg-surface-2", route.page === id ? "text-accent" : "text-ink")}>
+                <Icon size={18} /> {label}
+              </a>
+            ))}
+          </div>
+        )}
+        <div className="mx-auto grid max-w-lg grid-cols-6">
+          {primary.map(({ id, label, href, icon: Icon }) => {
+            const active = route.page === id;
+            return (
+              <a key={id} href={href} aria-current={active ? "page" : undefined}
+                className={cx("flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold", active ? "text-accent" : "text-ink-muted")}>
+                <Icon size={20} strokeWidth={active ? 2.4 : 2} />
+                {label}
+              </a>
+            );
+          })}
+          <button onClick={() => setMore((m) => !m)} aria-expanded={more}
+            className={cx("flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold normal-case", moreActive || more ? "text-accent" : "text-ink-muted")}>
+            <MoreHorizontal size={20} />
+            More
+          </button>
+        </div>
+      </nav>
+    </>
   );
 }
 
-function SearchOverlay({ open, onClose, stories, schedule, players }) {
+/** One search box over news, players, transfers, matches and history. */
+function SearchOverlay({ open, onClose, stories, schedules, squads, transfers }) {
   const [q, setQ] = useState("");
   const inputRef = useRef(null);
   useEffect(() => {
@@ -194,59 +223,93 @@ function SearchOverlay({ open, onClose, stories, schedule, players }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  if (!open) return null;
   const term = q.trim().toLowerCase();
-  const news = term ? stories.filter((s) => s.scope === "arsenal" && s.articles.some((a) => a.title.toLowerCase().includes(term) || (a.summary ?? "").toLowerCase().includes(term))).slice(0, 6) : [];
-  const matches = term && schedule ? [...schedule.fixtures, ...schedule.results].filter((m) => `${m.opp?.name} ${m.competition}`.toLowerCase().includes(term)).slice(0, 5) : [];
-  const squad = term ? (players ?? []).filter((p) => p.name.toLowerCase().includes(term)).slice(0, 5) : [];
+  const res = useMemo(() => {
+    if (!open || term.length < 2) return null;
+    const words = term.split(/\s+/);
+    const hit = (text) => words.every((w) => text.toLowerCase().includes(w));
+    return {
+      news: stories.filter((s) => s.scope === "arsenal" && s.articles.some((a) => hit(`${a.title} ${a.summary}`))).slice(0, 5),
+      players: [...(squads.men ?? []).map((p) => ({ ...p, team: "men" })), ...(squads.women ?? []).map((p) => ({ ...p, team: "women" }))]
+        .filter((p) => hit(`${p.name} ${p.position} ${p.nationality ?? ""}`)).slice(0, 5),
+      transfers: transfers.filter((e) => hit(`${e.player?.name ?? ""} ${e.headline}`)).slice(0, 4),
+      matches: schedules.flatMap((d) => (d ? [...d.fixtures, ...d.results] : [])).filter((m) => hit(`${m.opp?.name ?? ""} ${m.competition}`)).slice(0, 5),
+      history: searchHistory(term),
+    };
+  }, [open, term, stories, schedules, squads, transfers]);
+  if (!open) return null;
   const go = (href) => { window.location.hash = href; onClose(); };
+  const empty = res && Object.values(res).every((l) => !l.length);
+  const Group = ({ title, children }) => (
+    <div className="py-2">
+      <p className="eyebrow px-2 py-1 text-ink-muted">{title}</p>
+      {children}
+    </div>
+  );
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true" aria-label="Search">
-      <div className="mx-auto mt-0 max-w-xl bg-surface p-3 shadow-2xl sm:mt-20 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="mx-auto mt-0 max-w-xl bg-surface p-3 shadow-2xl sm:mt-16 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <form onSubmit={(e) => { e.preventDefault(); if (term) go(`#/news?q=${encodeURIComponent(q.trim())}`); }} className="flex items-center gap-2 border-b border-line pb-2">
           <Search size={18} className="ml-1 text-ink-muted" />
-          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search news, fixtures, players"
+          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search news, players, transfers, matches, history"
             className="min-w-0 flex-1 bg-transparent py-2 text-base text-ink placeholder:text-ink-muted focus:outline-none" aria-label="Search" />
           <button type="button" onClick={onClose} aria-label="Close search" className="grid h-8 w-8 place-items-center rounded-full text-ink-muted hover:bg-surface-2"><X size={16} /></button>
         </form>
-        <div className="max-h-[70vh] overflow-y-auto">
-          {!term && <p className="px-2 py-6 text-center text-sm text-ink-muted">Try a player, an opponent or a topic, e.g. “Saka”, “Chelsea”, “contract”.</p>}
-          {term && !news.length && !matches.length && !squad.length && <p className="px-2 py-6 text-center text-sm text-ink-muted">No results for “{q}”.</p>}
-          {news.length > 0 && (
-            <div className="py-2">
-              <p className="eyebrow px-2 py-1 text-ink-muted">News</p>
-              {news.map((s) => (
+        <div className="max-h-[75vh] overflow-y-auto">
+          {!res && <p className="px-2 py-6 text-center text-sm text-ink-muted">Try a player, an opponent, a competition or a topic, e.g. “Saka”, “Chelsea”, “contract”, “Invincibles”.</p>}
+          {empty && <p className="px-2 py-6 text-center text-sm text-ink-muted">No results for “{q}”.</p>}
+          {res?.news.length > 0 && (
+            <Group title="News">
+              {res.news.map((s) => (
                 <a key={s.id} href={s.lead.link} target="_blank" rel="noopener noreferrer" className="block rounded-lg px-2 py-2 hover:bg-surface-2">
                   <p className="text-sm font-semibold leading-snug text-ink">{s.lead.title}</p>
                   <p className="text-[11px] text-ink-muted">{s.lead.source} · {timeAgo(s.date)}</p>
                 </a>
               ))}
               <button onClick={() => go(`#/news?q=${encodeURIComponent(q.trim())}`)} className="mt-1 inline-flex items-center gap-1 px-2 text-xs font-semibold text-accent">All news results <ArrowRight size={12} /></button>
-            </div>
+            </Group>
           )}
-          {matches.length > 0 && (
-            <div className="py-2">
-              <p className="eyebrow px-2 py-1 text-ink-muted">Matches</p>
-              {matches.map((m) => (
+          {res?.players.length > 0 && (
+            <Group title="Players">
+              {res.players.map((p) => (
+                <button key={`${p.team}${p.id}`} onClick={() => go(`#/squad/player/${p.id}${p.team === "women" ? "?team=women" : ""}`)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-surface-2">
+                  <PlayerAvatar p={p} className="h-7 w-7" />
+                  <span className="flex-1 text-sm text-ink">{p.name}</span>
+                  <span className="text-[11px] text-ink-muted">{p.team === "women" ? "Women · " : ""}{p.position}</span>
+                </button>
+              ))}
+            </Group>
+          )}
+          {res?.transfers.length > 0 && (
+            <Group title="Transfers">
+              {res.transfers.map((e) => (
+                <button key={e.id} onClick={() => go("#/transfers")} className="block w-full rounded-lg px-2 py-2 text-left hover:bg-surface-2">
+                  <p className="text-sm font-semibold leading-snug text-ink">{e.player?.name ?? e.headline}</p>
+                  <p className="text-[11px] text-ink-muted">{e.direction} · {e.status}</p>
+                </button>
+              ))}
+            </Group>
+          )}
+          {res?.matches.length > 0 && (
+            <Group title="Matches">
+              {res.matches.map((m) => (
                 <button key={m.id} onClick={() => go(`#/matches/${m.id}`)} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-surface-2">
                   <Crest src={m.opp?.logo} alt={m.opp?.abbr} className="h-6 w-6" />
                   <span className="flex-1 text-sm text-ink">{m.isHome ? "vs" : "at"} {m.opp?.name}</span>
                   <span className="text-[11px] text-ink-muted">{m.state === "post" ? `${m.ars?.score}–${m.opp?.score}` : relDay(m.date)} · {m.compShort}</span>
                 </button>
               ))}
-            </div>
+            </Group>
           )}
-          {squad.length > 0 && (
-            <div className="py-2">
-              <p className="eyebrow px-2 py-1 text-ink-muted">Squad</p>
-              {squad.map((p) => (
-                <button key={p.id} onClick={() => go("#/squad")} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-surface-2">
-                  <PlayerAvatar p={p} className="h-7 w-7" />
-                  <span className="flex-1 text-sm text-ink">{p.name}</span>
-                  <span className="text-[11px] text-ink-muted">{p.position}</span>
+          {res?.history.length > 0 && (
+            <Group title="History">
+              {res.history.map((h, i) => (
+                <button key={i} onClick={() => go(h.kind === "invincibles" ? "#/history/invincibles" : "#/history")} className="block w-full rounded-lg px-2 py-2 text-left hover:bg-surface-2">
+                  <p className="text-sm font-semibold leading-snug text-ink"><span className="tabular-nums text-accent">{h.label}</span> · {h.title}</p>
+                  <p className="line-clamp-1 text-[11px] text-ink-muted">{h.text}</p>
                 </button>
               ))}
-            </div>
+            </Group>
           )}
         </div>
       </div>
@@ -297,13 +360,48 @@ const HOME_FILTERS = [
   { id: "injury", label: "Injuries" },
 ];
 
-function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs }) {
+/** Followed players and recently opened pages, kept on this device. */
+function YourHub({ saved, recents }) {
+  const players = Object.entries(saved.saved);
+  if (!players.length && !recents.recents.length) return null;
+  return (
+    <section>
+      <SectionHead title="Your hub" action={recents.recents.length > 0 && <button onClick={recents.clear} className="text-[11px] font-semibold text-ink-muted hover:text-ink">Clear history</button>} />
+      <Panel className="divide-y divide-line">
+        {players.length > 0 && (
+          <div className="p-3">
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Following</p>
+            <div className="flex flex-wrap gap-1.5">
+              {players.map(([id, p]) => (
+                <a key={id} href={`#/squad/player/${id}${p.team === "women" ? "?team=women" : ""}`} className="rounded-full bg-surface-2 px-2.5 py-1 text-xs font-semibold text-ink hover:bg-line">{p.name}</a>
+              ))}
+            </div>
+          </div>
+        )}
+        {recents.recents.length > 0 && (
+          <div className="p-3">
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Recently visited</p>
+            <ul className="space-y-1">
+              {recents.recents.slice(0, 5).map((r) => (
+                <li key={r.href}><a href={r.href} className="text-[13px] text-ink hover:text-accent">{r.title} <span className="text-[11px] text-ink-muted">· {r.kind}</span></a></li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Panel>
+    </section>
+  );
+}
+
+function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs, saved, recents }) {
   const now = useNow();
   const arsenal = stories.filter((x) => x.scope === "arsenal");
-  const featured = useMemo(() => pickFeatured(stories, now), [stories]); // eslint-disable-line react-hooks/exhaustive-deps
+  const briefing = useMemo(() => pickBriefing(stories, now), [stories]); // eslint-disable-line react-hooks/exhaustive-deps
+  const featured = briefing[0] ?? null;
+  const fan = useMemo(() => fanTalk(stories), [stories]);
   const homeCat = prefs.homeCategory ?? "all";
   const latest = arsenal
-    .filter((x) => x !== featured)
+    .filter((x) => !briefing.includes(x))
     .filter((x) => homeCat === "all" || x.categories.has(homeCat))
     .sort((a, b) => (b.date ?? 0) - (a.date ?? 0))
     .slice(0, 8);
@@ -312,6 +410,7 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs }) {
   const results = s.schedule.data?.results ?? [];
   const today = fixtures.find((m) => sameDay(m.date, new Date(now)) || m.state === "in");
   const matchNews = today ? arsenal.filter((x) => x.categories.has("match") && x.date && now - x.date < 30 * 3600e3).slice(0, 3) : [];
+  const fanDown = (s.arsenalNews.data?.feeds ?? []).filter((f) => ["arseblog", "reddit"].includes(f.id)).every((f) => !f.ok);
 
   return (
     <div className="space-y-8">
@@ -337,6 +436,13 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs }) {
       <section>
         {newsLoading ? <FeaturedSkeleton /> : featured ? <FeaturedStory story={featured} bookmarks={bookmarks} now={now} />
           : s.arsenalNews.status === "error" ? <Panel><EmptyState>News feeds are unavailable right now. Try refreshing.</EmptyState></Panel> : null}
+        {briefing.length > 1 && (
+          <div className="mt-4">
+            <SectionHead eyebrow="Daily briefing" title="Five things to know" />
+            <Panel className="px-4"><BriefingList stories={briefing} bookmarks={bookmarks} now={now} skipFirst /></Panel>
+            <p className="mt-1.5 text-[11px] text-ink-muted">The most important Arsenal stories of the last two days, ranked by recency, source reliability and how many outlets cover them. Summaries are the outlets’ own descriptions.</p>
+          </div>
+        )}
       </section>
 
       <div className="grid gap-8 lg:grid-cols-3">
@@ -371,6 +477,12 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs }) {
             <Panel className="overflow-hidden"><AvailabilityList source={s.roster} limit={5} /></Panel>
             <p className="mt-1.5 text-[11px] text-ink-muted">From ESPN injury reports, which can lag club updates.</p>
           </section>
+          <section>
+            <SectionHead title="Fan talk" />
+            <Panel className="overflow-hidden"><FanTalk stories={fan} unavailable={fanDown && !newsLoading} now={now} /></Panel>
+            <p className="mt-1.5 text-[11px] text-ink-muted">Opinion from fan sites, not reporting.</p>
+          </section>
+          <YourHub saved={saved} recents={recents} />
         </aside>
       </div>
     </div>
@@ -379,18 +491,26 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs }) {
 
 /* ───────────────────────── App ───────────────────────── */
 
-const TITLES = { home: "Arsenal Hub", news: "News · Arsenal Hub", matches: "Match Centre · Arsenal Hub", transfers: "Transfers · Arsenal Hub", squad: "Squad · Arsenal Hub" };
+const TITLES = {
+  home: "Arsenal Hub", news: "News · Arsenal Hub", matches: "Match Centre · Arsenal Hub", transfers: "Transfers · Arsenal Hub",
+  squad: "Squad · Arsenal Hub", analysis: "Analysis · Arsenal Hub", history: "History · Arsenal Hub",
+};
 
 export default function App() {
-  const { sources: s, load, refreshAll, refreshing, lastUpdated } = useHubData();
+  const { sources: s, load, ensure, refreshAll, refreshing, lastUpdated } = useHubData();
   const route = useRoute();
   const [dark, setDark] = useDarkMode();
   const [prefs, setPrefs] = usePersistentState("afc-prefs-v1", {});
   const bookmarks = useBookmarks();
+  const saved = useSavedPlayers();
+  const watch = useWatchlist();
+  const predictions = usePredictions();
+  const recents = useRecents();
   const [searchOpen, setSearchOpen] = useState(false);
   const [newsQuery, setNewsQuery] = useState("");
   const { stories, transfers } = useIntelligence(s);
   const now = useNow();
+  const team = route.query.get("team") === "women" ? "women" : "men";
 
   // Deep links: #/news?cat=injury, #/news?q=saka
   useEffect(() => {
@@ -401,7 +521,31 @@ export default function App() {
     if (q != null) setNewsQuery(q);
   }, [route]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The women's squad data is only fetched when someone asks for it.
+  useEffect(() => {
+    const needs = team === "women" && ["squad", "analysis"].includes(route.page);
+    if (needs) ensure("womenRoster");
+  }, [team, route.page, ensure]);
+  // Search covers both teams, so opening it loads the women's squad and fixtures too (once).
+  useEffect(() => { if (searchOpen) { ensure("womenRoster"); ensure("womenSchedule"); } }, [searchOpen, ensure]);
+  // Opening any search result for a player on the women's team (profile) also needs its roster.
+  useEffect(() => { if (route.page === "squad" && route.parts[0] === "player" && team === "women") ensure("womenRoster"); }, [route, team, ensure]);
+
   useEffect(() => { document.title = TITLES[route.page] ?? "Arsenal Hub"; }, [route.page]);
+
+  // Recently visited: player profiles and matches
+  useEffect(() => {
+    if (route.page === "squad" && route.parts[0] === "player") {
+      const id = route.parts[1];
+      const src = team === "women" ? s.womenRoster : s.roster;
+      const p = src.data?.players.find((x) => String(x.id) === String(id));
+      if (p) recents.push({ kind: "player", title: p.name, href: `#/squad/player/${id}${team === "women" ? "?team=women" : ""}` });
+    } else if (route.page === "matches" && route.parts[0]) {
+      const id = route.parts[0];
+      const m = [s.schedule.data, s.womenSchedule.data].flatMap((d) => (d ? [...d.fixtures, ...d.results] : [])).find((x) => String(x.id) === String(id));
+      if (m) recents.push({ kind: "match", title: `${m.home.short} v ${m.away.short}`, href: `#/matches/${id}` });
+    }
+  }, [route, s.roster.data, s.womenRoster.data, s.schedule.data, s.womenSchedule.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // "/" opens search
   useEffect(() => {
@@ -417,25 +561,45 @@ export default function App() {
 
   const injuryStories = stories.filter((x) => x.scope === "arsenal" && x.categories.has("injury")).sort((a, b) => (b.date ?? 0) - (a.date ?? 0));
   const newsLoading = !s.arsenalNews.data && s.arsenalNews.status === "loading";
+  const womens = team === "women";
+  const roster = womens ? s.womenRoster : s.roster;
 
   let page;
   switch (route.page) {
     case "news":
-      page = <NewsPage stories={stories} sources={s} load={load} bookmarks={bookmarks} prefs={prefs} setPrefs={setPrefs} query={newsQuery} setQuery={setNewsQuery} />;
+      page = <NewsPage stories={stories} sources={s} load={load} bookmarks={bookmarks} prefs={prefs} setPrefs={setPrefs} query={newsQuery} setQuery={setNewsQuery} squad={s.roster.data?.players ?? []} />;
       break;
     case "matches":
-      page = route.param
-        ? <MatchDetailPage id={route.param} schedule={s.schedule} stories={stories} onRetrySchedule={() => load("schedule")} />
-        : <MatchCentrePage sources={s} load={load} prefs={prefs} setPrefs={setPrefs} />;
+      page = route.parts[0]
+        ? <MatchDetailPage id={route.parts[0]} schedules={[s.schedule, s.womenSchedule]} stories={stories} onRetrySchedule={() => load("schedule")} ensure={ensure} predictions={predictions}
+            squads={{ men: s.roster.data?.players ?? [], women: s.womenRoster.data?.players ?? [] }} />
+        : <MatchCentrePage sources={s} load={load} prefs={prefs} setPrefs={setPrefs} team={team} ensure={ensure} />;
       break;
     case "transfers":
-      page = <TransfersPage entries={transfers} loading={newsLoading} failed={s.arsenalNews.status === "error"} prefs={prefs} setPrefs={setPrefs} archiveDays={ARCHIVE_DAYS} />;
+      page = <TransfersPage entries={transfers} loading={newsLoading} failed={s.arsenalNews.status === "error"} prefs={prefs} setPrefs={setPrefs} archiveDays={ARCHIVE_DAYS} watch={watch} />;
       break;
     case "squad":
-      page = <SquadPage source={s.roster} onRetry={() => load("roster")} injuryStories={injuryStories} bookmarks={bookmarks} now={now} prefs={prefs} setPrefs={setPrefs} />;
+      page = route.parts[0] === "player"
+        ? <PlayerProfilePage id={route.parts[1]} team={team} roster={roster} stories={stories} bookmarks={bookmarks} saved={saved} onRetryRoster={() => load(womens ? "womenRoster" : "roster")} />
+        : <SquadPage team={team} source={roster} onRetry={() => load(womens ? "womenRoster" : "roster")} injuryStories={injuryStories} bookmarks={bookmarks} now={now} prefs={prefs} setPrefs={setPrefs} saved={saved} />;
+      break;
+    case "analysis": {
+      const ids = [route.query.get("a") ?? "", route.query.get("b") ?? ""];
+      const setIds = ([a, b]) => {
+        const qs = new URLSearchParams();
+        if (a) qs.set("a", a);
+        if (b) qs.set("b", b);
+        if (womens) qs.set("team", "women");
+        window.location.hash = `#/analysis?${qs.toString()}`;
+      };
+      page = <ComparePage team={team} roster={roster} onRetry={() => load(womens ? "womenRoster" : "roster")} ids={ids} setIds={setIds} prefs={prefs} setPrefs={setPrefs} />;
+      break;
+    }
+    case "history":
+      page = <HistoryPage tab={route.parts[0]} prefs={prefs} setPrefs={setPrefs} />;
       break;
     default:
-      page = <HomePage s={s} load={load} stories={stories} transfers={transfers} bookmarks={bookmarks} prefs={prefs} setPrefs={setPrefs} />;
+      page = <HomePage s={s} load={load} stories={stories} transfers={transfers} bookmarks={bookmarks} prefs={prefs} setPrefs={setPrefs} saved={saved} recents={recents} />;
   }
 
   return (
@@ -448,22 +612,23 @@ export default function App() {
         Skip to content
       </a>
       <Header route={route} dark={dark} setDark={setDark} onRefresh={refreshAll} refreshing={refreshing} openSearch={() => setSearchOpen(true)} sources={s} lastUpdated={lastUpdated} />
-      <main id="main" tabIndex={-1} className="pb-safe outline-none mx-auto max-w-6xl px-4 pt-5 sm:pt-8">
-        <div className="mb-4 flex items-center justify-between text-[11px] text-ink-muted lg:hidden">
+      <main id="main" tabIndex={-1} className="pb-safe mx-auto max-w-6xl px-4 pt-5 outline-none sm:pt-8">
+        <div className="mb-4 flex items-center justify-between text-[11px] text-ink-muted xl:hidden">
           <Freshness sources={s} lastUpdated={lastUpdated} refreshing={refreshing} />
         </div>
-        <div key={route.page + (route.param ?? "")} className="fade-up">{page}</div>
+        <div key={route.page + route.parts.join("/") + team} className="fade-up">{page}</div>
         <footer className="mt-12 border-t border-line pt-4 text-[11px] leading-relaxed text-ink-muted">
           <p>
-            Unofficial fan site, not affiliated with Arsenal FC. Match data from ESPN; news from BBC Sport, Sky Sports, The Athletic, The Guardian, ESPN,
-            football.london, Arseblog and r/Gunners (headlines and feed summaries only; every story links to the original).
-            Preferences, saved articles and recent stories are stored on this device only.
+            Unofficial fan site, not affiliated with Arsenal FC. Match, squad and player data from ESPN; news from BBC Sport, Sky Sports, The Athletic, The Guardian, ESPN,
+            football.london, Arseblog and r/Gunners (headlines and feed summaries only; every story links to the original). The history section is a curated reference.
+            Preferences, saved items, predictions and recent stories are stored on this device only.
           </p>
           <p className="mt-1">Times shown in your timezone. Last refresh: {lastUpdated ? fmtTime(lastUpdated) : "—"}.</p>
         </footer>
       </main>
       <BottomNav route={route} />
-      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} stories={stories} schedule={s.schedule.data} players={s.roster.data?.players} />
+      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} stories={stories} transfers={transfers}
+        schedules={[s.schedule.data, s.womenSchedule.data]} squads={{ men: s.roster.data?.players, women: s.womenRoster.data?.players }} />
     </div>
   );
 }

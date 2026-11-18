@@ -120,5 +120,5 @@
 
 /* Leave room for the mobile bottom nav + iOS home indicator */
 .pb-safe { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
-@media (min-width: 768px) { .pb-safe { padding-bottom: 2rem; } }
+@media (min-width: 1024px) { .pb-safe { padding-bottom: 2rem; } }
 .bottom-safe { padding-bottom: env(safe-area-inset-bottom); }

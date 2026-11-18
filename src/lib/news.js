@@ -440,3 +440,37 @@ export function playerKeys(players = []) {
     };
   });
 }
+
+/**
+ * The daily briefing: the five most important Arsenal developments from the
+ * last ~two days. Ranked by relevance, at most two per topic so one saga
+ * (e.g. contract news) can't fill the whole list, fan opinion excluded.
+ */
+export function pickBriefing(stories, now = Date.now(), n = 5) {
+  const arsenal = stories.filter((s) => s.scope === "arsenal" && s.tier !== "opinion" && s.primary !== "analysis" && s.date);
+  const fresh = arsenal.filter((s) => now - s.date.getTime() < 48 * HOUR);
+  const pool = (fresh.length >= n ? fresh : arsenal.filter((s) => now - s.date.getTime() < 7 * 24 * HOUR)).sort((a, b) => b.score - a.score);
+  const perTopic = {};
+  const out = [];
+  for (const s of pool) {
+    const topic = s.primary === "contract" ? "transfer" : s.primary;
+    if ((perTopic[topic] ?? 0) >= 2) continue;
+    perTopic[topic] = (perTopic[topic] ?? 0) + 1;
+    out.push(s);
+    if (out.length === n) break;
+  }
+  return out;
+}
+
+/** Fan-site discussion (r/Gunners, Arseblog): shown separately and always labelled as opinion. */
+export function fanTalk(stories, n = 4) {
+  return stories.filter((s) => s.scope === "arsenal" && s.tier === "opinion").sort((a, b) => (b.date ?? 0) - (a.date ?? 0)).slice(0, n);
+}
+
+export const storyMentions = (story, playerId) => story.articles.some((a) => a.players?.has(playerId));
+
+/** Searchable text for a story, including its topic and competition labels. */
+export function storyHaystack(story) {
+  const labels = [...story.categories].map((c) => CATEGORY_LABEL[c] ?? c).join(" ");
+  return `${story.articles.map((a) => `${a.title} ${a.summary} ${a.source}`).join(" ")} ${labels}`.toLowerCase();
+}
