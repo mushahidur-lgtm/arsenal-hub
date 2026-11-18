@@ -114,8 +114,9 @@ export function Crest({ src, alt, className = "h-8 w-8" }) {
 }
 
 /** Lazy image with a neutral placeholder when missing/broken. */
-export function Thumb({ src, alt = "", className, children, priority }) {
+export function Thumb({ src, alt = "", className, children, priority, onBroken }) {
   const [broken, setBroken] = useState(false);
+  useEffect(() => { if (broken) onBroken?.(); }, [broken]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className={cx("relative overflow-hidden bg-surface-2", className)}>
       {src && !broken ? (

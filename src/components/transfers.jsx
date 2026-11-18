@@ -251,13 +251,12 @@ export function TransfersPage({ entries, loading, failed, prefs, setPrefs, archi
 }
 
 /** Homepage: the most significant transfer items. */
-export function TransferWatch({ entries, limit = 4 }) {
-  const now = useNow();
+export function TransferWatch({ entries, limit = 4, unavailable }) {
   const top = [...entries]
     .filter((e) => e.direction !== "general" || e.reliableOutlets.length)
     .sort((a, b) => STATUSES[b.status].rank - STATUSES[a.status].rank || (b.updated ?? 0) - (a.updated ?? 0))
     .slice(0, limit);
-  if (!top.length) return <EmptyState>No transfer reports in the feeds right now.</EmptyState>;
+  if (!top.length) return <EmptyState>{unavailable ? "News feeds unavailable." : "No transfer reports in the feeds right now."}</EmptyState>;
   return (
     <ul className="divide-y divide-line">
       {top.map((e) => (

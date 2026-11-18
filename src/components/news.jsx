@@ -155,15 +155,19 @@ export function StoryRow({ story, bookmarks, now, showImage = true, dense }) {
 /** Today's top story: the lead of the daily briefing. */
 export function FeaturedStory({ story, bookmarks, now }) {
   const [open, setOpen] = useState(false);
+  const [noImage, setNoImage] = useState(false);
   if (!story) return null;
   const a = story.lead;
+  const showImage = story.image && !noImage;
   return (
     <article className="fade-up overflow-hidden rounded-2xl border border-line bg-surface">
-      <div className="grid md:grid-cols-5">
-        <a href={a.link} target="_blank" rel="noopener noreferrer" className="block md:col-span-3" tabIndex={-1} aria-hidden>
-          <Thumb src={story.image} priority className="aspect-[16/9] h-full w-full md:aspect-auto md:min-h-[300px]" />
-        </a>
-        <div className="flex flex-col gap-3 p-5 md:col-span-2 md:p-6">
+      <div className={cx("grid", showImage && "md:grid-cols-5")}>
+        {showImage && (
+          <a href={a.link} target="_blank" rel="noopener noreferrer" className="block md:col-span-3" tabIndex={-1} aria-hidden>
+            <Thumb src={story.image} priority onBroken={() => setNoImage(true)} className="aspect-[16/9] h-full w-full md:aspect-auto md:min-h-[300px]" />
+          </a>
+        )}
+        <div className={cx("flex flex-col gap-3 p-5 md:p-6", showImage ? "md:col-span-2" : "border-l-4 border-brand")}>
           <div className="flex items-center justify-between gap-2">
             <p className="eyebrow text-accent">Top story · {CATEGORY_SHORT[story.primary] ?? "News"}</p>
             <BookmarkButton article={a} bookmarks={bookmarks} className="-mr-2 -mt-1" />

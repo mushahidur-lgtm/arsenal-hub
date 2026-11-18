@@ -52,7 +52,12 @@ const ARCHIVE_MAX = 400;
  */
 export function mergeWithArchive(items) {
   const cutoff = Date.now() - ARCHIVE_DAYS * 86400e3;
-  const prev = readJSON(ARCHIVE_KEY, []).map((i) => ({ ...i, date: i.date ? new Date(i.date) : null, updated: i.updated ? new Date(i.updated) : null }));
+  const prev = readJSON(ARCHIVE_KEY, []).map((i) => ({
+    ...i,
+    date: i.date ? new Date(i.date) : null,
+    updated: i.updated ? new Date(i.updated) : null,
+    image: i.image ? i.image.replace(/&amp;/g, "&") : null,
+  }));
   const byLink = new Map();
   for (const i of prev) if (i.link && i.date && i.date.getTime() > cutoff) byLink.set(i.link, { ...i, archived: true });
   for (const i of items) if (i.link) byLink.set(i.link, i); // fresh copy wins

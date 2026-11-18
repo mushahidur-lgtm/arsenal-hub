@@ -99,6 +99,15 @@
   text-transform: uppercase;
 }
 
+/* Grids without an explicit column count get an `auto` track that grows to
+   fit wide content (a scrolling chip row, a table), stretching the page on
+   phones. Default every grid to one shrinkable column; grid-cols-* utilities
+   (a later cascade layer) still override this. */
+@layer base {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .grid > * { min-width: 0; }
+}
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 

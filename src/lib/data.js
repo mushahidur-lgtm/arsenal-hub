@@ -398,8 +398,14 @@ export async function lookupPlayers(names, max = 8) {
 
 /* ────────────────────────────── Loaders ────────────────────────────── */
 
+/** Cap each feed so one slow fallback chain can't hold up the whole news refresh. */
+const withDeadline = (p, ms) =>
+  Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new FetchError("Timed out", "timeout")), ms))]);
+
 async function loadFeeds(list) {
-  const settled = await Promise.allSettled(list.map(([, fn]) => fn()));
+  // 8s: healthy feeds answer in 1–2s; a feed still on its proxy fallback chain
+  // after that rarely succeeds and shouldn't keep a first-time visitor waiting.
+  const settled = await Promise.allSettled(list.map(([, fn]) => withDeadline(fn(), 8000)));
   const feeds = settled.map((s, i) => ({
     id: list[i][0],
     name: OUTLETS[list[i][0]]?.name ?? list[i][0],
@@ -504,9 +510,11 @@ export function useHubData() {
       const savedAt = new Date();
       writeCache(key, data);
       setSources((s) => ({ ...s, [key]: { status: "ok", data, error: null, warnings, savedAt } }));
+      return true;
     } catch (err) {
       // Keep previously loaded data (if any) and surface the error alongside it.
       setSources((s) => ({ ...s, [key]: { ...s[key], status: "error", error: err?.message ?? "Failed to load" } }));
+      return false;
     }
   }, []);
 
@@ -515,8 +523,9 @@ export function useHubData() {
     lastRefresh.current = Date.now();
     const keys = Object.keys(LOADERS);
     keys.filter((k) => OPTIONAL_SOURCES.has(k)).forEach(load); // fire and forget
-    await Promise.allSettled(keys.filter((k) => !OPTIONAL_SOURCES.has(k)).map(load));
-    setLastUpdated(new Date());
+    const results = await Promise.all(keys.filter((k) => !OPTIONAL_SOURCES.has(k)).map(load));
+    // "Last refreshed" means data actually arrived, not just that we tried.
+    if (results.some(Boolean)) setLastUpdated(new Date());
     setRefreshing(false);
   }, [load]);
 

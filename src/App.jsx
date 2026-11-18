@@ -111,6 +111,7 @@ function Freshness({ sources, lastUpdated, refreshing, className }) {
   if (refreshing && !lastUpdated) text = savedAt ? `Showing saved data from ${timeAgo(savedAt, now)} · refreshing…` : "Loading live data…";
   else if (refreshing) text = "Refreshing…";
   else if (lastUpdated) text = `Feeds refreshed ${timeAgo(lastUpdated, now)}`;
+  else if (savedAt) text = `Showing saved data from ${timeAgo(savedAt, now)}`;
   else text = "";
   return (
     <span className={cx("inline-flex items-center gap-1.5", className)} title={lastUpdated ? lastUpdated.toLocaleString() : undefined}>
@@ -142,7 +143,9 @@ function Header({ route, dark, setDark, onRefresh, refreshing, openSearch, sourc
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-1">
-          <Freshness sources={sources} lastUpdated={lastUpdated} refreshing={refreshing} className="mr-2 hidden text-[11px] text-ink-muted lg:inline-flex" />
+          <span className="mr-2 hidden text-[11px] text-ink-muted lg:block">
+            <Freshness sources={sources} lastUpdated={lastUpdated} refreshing={refreshing} />
+          </span>
           <button onClick={openSearch} aria-label="Search" title="Search (/)" className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-surface-2 hover:text-ink">
             <Search size={18} />
           </button>
@@ -342,22 +345,22 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs }) {
           <Chips options={HOME_FILTERS} value={homeCat} onChange={(v) => setPrefs((p) => ({ ...p, homeCategory: v }))} className="mb-1" />
           <div className="divide-y divide-line">
             {newsLoading ? <StoryListSkeleton rows={5} /> : latest.length ? latest.map((st) => <StoryRow key={st.id} story={st} bookmarks={bookmarks} now={now} />)
-              : <EmptyState>No stories in this category right now.</EmptyState>}
+              : <EmptyState>{s.arsenalNews.status === "error" && !s.arsenalNews.data ? "News unavailable." : "No stories in this category right now."}</EmptyState>}
           </div>
         </section>
 
         <aside className="space-y-8">
           <section>
             <SectionHead title="Transfer watch" href="#/transfers" />
-            <Panel className="overflow-hidden"><TransferWatch entries={transfers} /></Panel>
+            <Panel className="overflow-hidden"><TransferWatch entries={transfers} unavailable={s.arsenalNews.status === "error" && !s.arsenalNews.data} /></Panel>
           </section>
           <section>
             <SectionHead title="Upcoming" href="#/matches" linkLabel="All fixtures" />
-            <Panel className="overflow-hidden"><MatchList matches={fixtures.slice(0, 3)} dense empty={s.schedule.status === "error" ? "Fixtures unavailable." : "No fixtures announced."} /></Panel>
+            <Panel className="overflow-hidden"><MatchList matches={fixtures.slice(0, 3)} dense empty={s.schedule.status === "error" ? "Fixtures unavailable." : s.schedule.data ? "No fixtures announced." : "Loading…"} /></Panel>
           </section>
           <section>
             <SectionHead title="Recent results" href="#/matches" />
-            <Panel className="overflow-hidden"><MatchList matches={results.filter((m) => !m.friendly).slice(0, 3)} dense empty="No results yet." /></Panel>
+            <Panel className="overflow-hidden"><MatchList matches={results.filter((m) => !m.friendly).slice(0, 3)} dense empty={s.schedule.status === "error" ? "Results unavailable." : s.schedule.data ? "No results yet." : "Loading…"} /></Panel>
           </section>
           <section>
             <SectionHead title="Premier League" href="#/matches" linkLabel="Full table" />
