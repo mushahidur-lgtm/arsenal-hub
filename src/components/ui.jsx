@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { AlertTriangle, ChevronRight, RefreshCw } from "lucide-react";
 import { timeAgo } from "../lib/format.js";
+import { isChunkError } from "../lib/lazy.js";
 
 export const cx = (...c) => c.filter(Boolean).join(" ");
 
@@ -21,9 +22,19 @@ export class ErrorBoundary extends React.Component {
     return (
       <div className="mx-auto max-w-md rounded-2xl border border-line bg-surface p-8 text-center">
         <AlertTriangle className="mx-auto mb-2 text-amber-500" />
-        <p className="font-semibold text-ink">This page hit a problem</p>
-        <p className="mt-1 text-sm text-ink-muted">{String(this.state.error?.message ?? this.state.error)}</p>
-        <a href="#/" className="mt-4 inline-block rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white">Back to home</a>
+        {isChunkError(this.state.error) ? (
+          <>
+            <p className="font-semibold text-ink">This part of the site couldn’t be loaded</p>
+            <p className="mt-1 text-sm text-ink-muted">You may be offline, or the site was updated while this tab was open.</p>
+            <button onClick={() => window.location.reload()} className="mt-4 inline-block rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white">Reload page</button>
+          </>
+        ) : (
+          <>
+            <p className="font-semibold text-ink">This page hit a problem</p>
+            <p className="mt-1 text-sm text-ink-muted">{String(this.state.error?.message ?? this.state.error)}</p>
+            <a href="#/" className="mt-4 inline-block rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white">Back to home</a>
+          </>
+        )}
       </div>
     );
   }

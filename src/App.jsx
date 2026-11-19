@@ -6,7 +6,8 @@
  * loading lives in lib/data.js; news intelligence in lib/news.js; transfers in
  * lib/transfers.js; per-player stats in lib/playerstats.js. Pages live in components/.
  */
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazyRetry } from "./lib/lazy.js";
 import {
   AlertTriangle, ArrowRight, BarChart3, CalendarDays, Home, Landmark, MoreHorizontal, Moon, Newspaper, RefreshCw, Repeat, Search, Sun, Users, X,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import { TEAM_ID, lookupPlayers, useHubData } from "./lib/data.js";
 import { buildStories, fanTalk, pickBriefing, playerKeys } from "./lib/news.js";
 import { buildTransfers, namesToLookUp } from "./lib/transfers.js";
 import { searchHistory } from "./lib/history.js";
+import { homeTabHash, parseHash } from "./lib/route.js";
 import { readJSON, useBookmarks, usePersistentState, usePredictions, useRecents, useSavedPlayers, useWatchlist } from "./lib/storage.js";
 import { fmtLongDay, fmtTime, relDay, sameDay, timeAgo } from "./lib/format.js";
 import { Chips, Crest, EmptyState, ErrorBoundary, Panel, SectionError, SectionHead, Skel, SkeletonRows, SourceGate, cx, useNow } from "./components/ui.jsx";
@@ -22,8 +24,9 @@ import { FormStrip, MatchCentrePage, MatchDetailPage, MatchList, NextMatchHero, 
 import { AvailabilityList, PlayerAvatar, PlayerProfilePage, SquadPage } from "./components/squad.jsx";
 import { isReportedAbsent, summarizeAvailability } from "./lib/availability.js";
 import { TransferWatch, TransfersPage } from "./components/transfers.jsx";
-import { ComparePage } from "./components/analysis.jsx";
-import { HistoryPage } from "./components/history.jsx";
+// Rarely-opened pages load on demand, so the first paint doesn't pay for them.
+const ComparePage = lazyRetry(() => import("./components/analysis.jsx").then((m) => ({ default: m.ComparePage })));
+const HistoryPage = lazyRetry(() => import("./components/history.jsx").then((m) => ({ default: m.HistoryPage })));
 
 const CREST = `https://a.espncdn.com/i/teamlogos/soccer/500/${TEAM_ID}.png`;
 const ARCHIVE_DAYS = 21;
@@ -40,26 +43,14 @@ const NAV = [
   { id: "history", label: "History", href: "#/history", icon: Landmark },
 ];
 
-function parseHash() {
-  const raw = window.location.hash.replace(/^#\/?/, "");
-  const [path, qs] = raw.split("?");
-  // A hand-typed or truncated link such as #/%E0%A4%A is not valid percent-encoding;
-  // decodeURIComponent would throw and blank the whole app, so keep the raw segment instead.
-  const safeDecode = (p) => { try { return decodeURIComponent(p); } catch { return p; } };
-  const parts = path.split("/").filter(Boolean).map(safeDecode);
-  const first = parts[0] ?? "";
-  // Legacy tab ids from earlier versions of the site
-  const legacy = { overview: "home", fixtures: "matches", stats: "matches" }[first];
-  const page = legacy ?? (NAV.some((n) => n.id === first) ? first : "home");
-  return { page, parts: parts.slice(1), query: new URLSearchParams(qs ?? "") };
-}
+const currentRoute = () => parseHash(window.location.hash);
 
 function useRoute() {
-  const [route, setRoute] = useState(parseHash);
+  const [route, setRoute] = useState(currentRoute);
   const prev = useRef(route);
   useEffect(() => {
     const on = () => {
-      const next = parseHash();
+      const next = currentRoute();
       // Switching a tab (a query change on the same page) shouldn't throw the reader back to the top.
       const samePage = next.page === prev.current.page && next.parts.join("/") === prev.current.parts.join("/");
       prev.current = next;
@@ -180,7 +171,20 @@ function Header({ route, dark, setDark, onRefresh, refreshing, openSearch, sourc
 /** Five primary destinations plus a "More" sheet (Analysis, History), so nothing is cramped on a phone. */
 function BottomNav({ route }) {
   const [more, setMore] = useState(false);
+  const moreButton = useRef(null);
   useEffect(() => setMore(false), [route]);
+  // Escape closes the menu and hands focus back to the button that opened it.
+  useEffect(() => {
+    if (!more) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setMore(false);
+        moreButton.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [more]);
   const primary = NAV.filter((n) => n.primary);
   const secondary = NAV.filter((n) => !n.primary);
   const moreActive = secondary.some((n) => n.id === route.page);
@@ -191,7 +195,7 @@ function BottomNav({ route }) {
         {more && (
           <div className="absolute inset-x-3 bottom-full mb-2 overflow-hidden rounded-xl border border-line bg-surface shadow-xl">
             {secondary.map(({ id, label, href, icon: Icon }) => (
-              <a key={id} href={href} className={cx("flex items-center gap-3 px-4 py-3 text-sm font-semibold hover:bg-surface-2", route.page === id ? "text-accent" : "text-ink")}>
+              <a key={id} href={href} aria-current={route.page === id ? "page" : undefined} className={cx("flex items-center gap-3 px-4 py-3 text-sm font-semibold hover:bg-surface-2", route.page === id ? "text-accent" : "text-ink")}>
                 <Icon size={18} /> {label}
               </a>
             ))}
@@ -208,7 +212,7 @@ function BottomNav({ route }) {
               </a>
             );
           })}
-          <button onClick={() => setMore((m) => !m)} aria-expanded={more}
+          <button ref={moreButton} onClick={() => setMore((m) => !m)} aria-expanded={more}
             className={cx("flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold normal-case", moreActive || more ? "text-accent" : "text-ink-muted")}>
             <MoreHorizontal size={20} />
             More
@@ -571,6 +575,17 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs, sav
   );
 }
 
+/** Shown while a lazily-loaded page's code downloads. */
+function PageLoading() {
+  return (
+    <div className="space-y-4" role="status" aria-label="Loading page">
+      <Skel className="h-4 w-24" />
+      <Skel className="h-8 w-2/3" />
+      <Skel className="h-40 w-full rounded-2xl" />
+    </div>
+  );
+}
+
 /* ───────────────────────── App ───────────────────────── */
 
 const TITLES = {
@@ -683,7 +698,7 @@ export default function App() {
     default:
       page = <HomePage s={s} load={load} stories={stories} transfers={transfers} bookmarks={bookmarks} prefs={prefs} setPrefs={setPrefs} saved={saved} recents={recents}
         tab={HOME_TABS.some((t) => t.id === route.query.get("tab")) ? route.query.get("tab") : "today"}
-        setTab={(t) => { window.location.hash = t === "today" ? "#/" : `#/?tab=${t}`; }} />;
+        setTab={(t) => { window.location.hash = homeTabHash(t); }} />;
   }
 
   return (
@@ -701,7 +716,9 @@ export default function App() {
           <Freshness sources={s} lastUpdated={lastUpdated} refreshing={refreshing} />
         </div>
         <ErrorBoundary resetKey={route.page + route.parts.join("/") + team}>
-          <div key={route.page + route.parts.join("/") + team} className="fade-up">{page}</div>
+          <div key={route.page + route.parts.join("/") + team} className="fade-up">
+            <Suspense fallback={<PageLoading />}>{page}</Suspense>
+          </div>
         </ErrorBoundary>
         <footer className="mt-12 border-t border-line pt-4 text-[11px] leading-relaxed text-ink-muted">
           <p>

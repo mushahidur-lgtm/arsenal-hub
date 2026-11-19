@@ -56,3 +56,49 @@ describe("keyEvents / talkingPoints", () => {
     expect(talkingPoints(summary, null)).toEqual([]);
   });
 });
+
+import { UNCONFIRMED_AFTER_MS, matchPhase, pickNextMatch } from "../../src/lib/hero.js";
+
+describe("matchPhase: live, upcoming, completed and stale fixtures", () => {
+  const at = (iso) => new Date(iso);
+  const KICK = T("2025-03-01T15:00:00Z");
+  const fx = (over) => m({ date: at("2025-03-01T15:00:00Z"), ...over });
+  it("classifies each state", () => {
+    expect(matchPhase(fx({ state: "in" }), KICK + 1)).toBe("live");
+    expect(matchPhase(fx({ state: "post" }), KICK + 9e9)).toBe("completed");
+    expect(matchPhase(fx(), KICK - 60e3)).toBe("upcoming");
+    expect(matchPhase(fx(), KICK + 60e3)).toBe("kickoff-passed");
+    expect(matchPhase(fx(), KICK + UNCONFIRMED_AFTER_MS + 1)).toBe("unconfirmed");
+  });
+  it("postponed wins over every other state; a missing date is unknown", () => {
+    for (const state of ["pre", "in", "post"]) expect(matchPhase(fx({ state, postponed: true }), KICK)).toBe("postponed");
+    expect(matchPhase(fx({ date: null }), KICK)).toBe("unknown");
+    expect(matchPhase(fx({ date: new Date("x") }), KICK)).toBe("unknown");
+    expect(matchPhase(null)).toBe("unknown");
+  });
+  it("is exactly at the boundary: 3.5h after kick-off is still 'kickoff-passed'", () => {
+    expect(matchPhase(fx(), KICK + UNCONFIRMED_AFTER_MS)).toBe("kickoff-passed");
+  });
+  it("a stale fixture never blocks the real next match", () => {
+    const stale = fx({ id: "stale", date: at("2025-02-20T15:00:00Z") });
+    const later = fx({ id: "later", date: at("2025-03-08T15:00:00Z") });
+    const r = pickNextMatch({ fixtures: [stale, later], results: [] }, KICK);
+    expect(r.next.id).toBe("later");
+    expect(r.stale.map((x) => x.id)).toEqual(["stale"]);
+  });
+  it("live beats upcoming; with only stale fixtures there is no 'next', and nothing is invented", () => {
+    const live = fx({ id: "live", state: "in" });
+    expect(pickNextMatch({ fixtures: [fx({ id: "up", date: at("2025-03-08T15:00:00Z") }), live], results: [] }, KICK + 1).next.id).toBe("live");
+    const only = pickNextMatch({ fixtures: [fx({ id: "old", date: at("2025-02-01T15:00:00Z") })], results: [] }, KICK);
+    expect(only.next).toBeNull();
+    expect(only.stale).toHaveLength(1);
+  });
+  it("last result skips friendlies when a competitive one exists, and handles empty data", () => {
+    const friendly = fx({ id: "f", state: "post", friendly: true });
+    const real = fx({ id: "r", state: "post" });
+    expect(pickNextMatch({ fixtures: [], results: [friendly, real] }, KICK).last.id).toBe("r");
+    expect(pickNextMatch({ fixtures: [], results: [friendly] }, KICK).last.id).toBe("f");
+    expect(pickNextMatch(null)).toEqual({ next: null, last: null, stale: [] });
+    expect(pickNextMatch({}, KICK)).toEqual({ next: null, last: null, stale: [] });
+  });
+});

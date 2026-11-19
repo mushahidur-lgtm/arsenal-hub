@@ -1,11 +1,18 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazyRetry } from "../lib/lazy.js";
+import { useRefreshEpoch } from "../lib/refresh.js";
 import {
   Activity, ArrowLeft, CalendarDays, Goal, MapPin, RefreshCw, Shield, ShieldCheck, Star, Target, Trophy,
 } from "lucide-react";
 import { TEAM_ID, WOMEN_ID, fetchMatchSummary } from "../lib/data.js";
 import { tableGaps } from "../lib/standings.js";
-import { heroMode, keyEvents, talkingPoints } from "../lib/hero.js";
-import { LineupPanel, MatchReport, PredictionBox } from "./pitch.jsx";
+import { heroMode, keyEvents, matchPhase, pickNextMatch, talkingPoints } from "../lib/hero.js";
+// The pitch, match report and prediction widgets are only needed on a match page.
+const pitch = (name) => lazyRetry(() => import("./pitch.jsx").then((m) => ({ default: m[name] })));
+const LineupPanel = pitch("LineupPanel");
+const MatchReport = pitch("MatchReport");
+const PredictionBox = pitch("PredictionBox");
+const Deferred = ({ children }) => <Suspense fallback={<SkeletonRows rows={3} avatar={false} />}>{children}</Suspense>;
 import { TeamSwitch } from "./squad.jsx";
 import { fmtDay, fmtFull, fmtKick, fmtLongDay, fmtTime, ordinal, relDay, sameDay, signed, timeAgo, tzShort, userTz } from "../lib/format.js";
 import {
@@ -54,13 +61,10 @@ export function Countdown({ date }) {
 
 /* ───────────────────────── Hero: next / live match ───────────────────────── */
 
-const pickNext = (data) => {
-  if (!data) return { next: null, last: null };
-  const live = data.fixtures.find((m) => m.state === "in");
-  const next = live ?? data.fixtures.find((m) => !m.postponed) ?? null;
-  const last = data.results.find((m) => !m.friendly) ?? data.results[0] ?? null;
-  return { next, last };
-};
+// A missing score is shown as a dash, never as 0.
+const scoreText = (v) => (v == null ? "–" : v);
+// "2–1", or "– : –" when ESPN supplied no score (so it can't be mistaken for a 0–0).
+const scoreLine = (home, away) => (home == null || away == null ? `${scoreText(home)} : ${scoreText(away)}` : `${home}–${away}`);
 
 function HeroShell({ children, className }) {
   return (
@@ -85,17 +89,20 @@ function HeroSide({ side, isArsenal }) {
 /** Match summary for the hero; re-checked every minute while the match is in play. */
 function useHeroSummary(match) {
   const [state, setState] = useState({ data: null, error: null, loading: false, at: null });
+  const epoch = useRefreshEpoch();
+  const mountEpoch = useRef(epoch);
   useEffect(() => {
     if (!match) { setState({ data: null, error: null, loading: false, at: null }); return undefined; }
     let cancelled = false;
-    const run = () => fetchMatchSummary(match)
+    const force = epoch !== mountEpoch.current; // a refresh since mount must reach the network
+    const run = () => fetchMatchSummary(match, { fresh: force })
       .then((data) => !cancelled && setState({ data, error: null, loading: false, at: new Date() }))
       .catch((err) => !cancelled && setState((s) => ({ ...s, error: err.message, loading: false })));
     setState((s) => ({ ...s, loading: true }));
     run();
     const id = match.state === "in" ? setInterval(run, 60e3) : null;
     return () => { cancelled = true; if (id) clearInterval(id); };
-  }, [match?.id, match?.state]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [match?.id, match?.state, epoch]); // eslint-disable-line react-hooks/exhaustive-deps
   return state;
 }
 
@@ -141,7 +148,7 @@ function MatchdayHero({ match, mode, summary, source }) {
       <div className="mx-auto flex max-w-md items-center gap-2">
         <HeroSide side={match.home} isArsenal={match.home?.id === TEAM_ID} />
         <div className="flex shrink-0 flex-col items-center gap-1 px-1">
-          <span className="font-display text-4xl font-bold tabular-nums sm:text-5xl" aria-label={`Score ${match.home.score ?? 0} to ${match.away.score ?? 0}`}>{match.home.score ?? 0}–{match.away.score ?? 0}</span>
+          <span className="font-display text-4xl font-bold tabular-nums sm:text-5xl" aria-label={`Score ${scoreText(match.home.score)} to ${scoreText(match.away.score)}`}>{scoreLine(match.home.score, match.away.score)}</span>
           {!live && match.result && <ResultPill r={match.result} className="h-6 w-6 text-xs" />}
         </div>
         <HeroSide side={match.away} isArsenal={match.away?.id === TEAM_ID} />
@@ -208,12 +215,13 @@ export function NextMatchHero({ source, onRetry }) {
       </div>
     );
   }
-  const { next, last } = pickNext(source.data);
+  const { next, last, stale } = pickNextMatch(source.data, now);
   if (!next)
     return (
       <HeroShell className="p-6 text-center">
         <Trophy className="mx-auto mb-2 text-gold-light" />
         <p className="font-semibold">No upcoming fixtures announced yet</p>
+        {stale[0] && <p className="mt-1 text-sm text-white/70">ESPN hasn’t updated the status of {stale[0].home.short} v {stale[0].away.short} ({fmtDay(stale[0].date)}).</p>}
         {last && <p className="mt-1 text-sm text-white/70">Latest: {last.home.short} {last.home.score}–{last.away.score} {last.away.short} · {fmtDay(last.date)}</p>}
       </HeroShell>
     );
@@ -242,7 +250,7 @@ export function NextMatchHero({ source, onRetry }) {
           <HeroSide side={next.home} isArsenal={next.home?.id === TEAM_ID} />
           <div className="flex shrink-0 flex-col items-center px-1">
             {inPlay ? (
-              <span className="font-display text-4xl font-bold tabular-nums">{next.home.score ?? 0}–{next.away.score ?? 0}</span>
+              <span className="font-display text-4xl font-bold tabular-nums">{scoreLine(next.home.score, next.away.score)}</span>
             ) : (
               <>
                 <span className="font-display text-2xl font-bold tabular-nums sm:text-3xl">{fmtTime(next.date)}</span>
@@ -284,6 +292,7 @@ export function NextMatchHero({ source, onRetry }) {
 
 export function MatchRow({ m, dense }) {
   const done = m.state === "post";
+  const phase = matchPhase(m);
   return (
     <li>
       <a href={`#/matches/${m.id}`} className={cx("flex items-center gap-3 transition hover:bg-surface-2", dense ? "px-3 py-2.5" : "px-4 py-3")}>
@@ -299,7 +308,7 @@ export function MatchRow({ m, dense }) {
           <p className="truncate text-sm font-semibold text-ink">{m.isHome ? "vs" : "at"} {m.opp?.short ?? m.opp?.name}</p>
           <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-ink-muted">
             <CompBadge match={m} />
-            <span>{done ? fmtDay(m.date) : `${relDay(m.date)} · ${fmtTime(m.date)}`}</span>
+            <span>{done || phase === "unconfirmed" ? fmtDay(m.date) : `${relDay(m.date)} · ${fmtTime(m.date)}`}</span>
           </p>
         </div>
         <div className="shrink-0 text-right">
@@ -311,6 +320,8 @@ export function MatchRow({ m, dense }) {
             <span className="rounded bg-brand px-1.5 py-0.5 text-[11px] font-bold text-white">{m.ars?.score}–{m.opp?.score} · {m.clock}</span>
           ) : m.postponed ? (
             <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Postponed</span>
+          ) : phase === "unconfirmed" ? (
+            <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400" title="Kick-off was a while ago and ESPN still lists this as scheduled">Awaiting result</span>
           ) : (
             <span className="text-[11px] text-ink-muted">{tzShort(m.date)}</span>
           )}
@@ -657,12 +668,15 @@ export function MatchDetailPage({ id, schedules, stories, onRetrySchedule, ensur
   const schedule = menSchedule;
   const [detail, setDetail] = useState({ status: "idle" });
 
+  const epoch = useRefreshEpoch();
+  const mountEpoch = useRef(epoch);
   useEffect(() => {
     if (!match) return;
     let cancelled = false;
+    const force = epoch !== mountEpoch.current; // a data refresh since this page opened must reach the network
     const run = () => {
       setDetail((d) => ({ ...d, status: d.data ? "refreshing" : "loading" }));
-      fetchMatchSummary(match)
+      fetchMatchSummary(match, { fresh: force })
         .then((data) => !cancelled && setDetail({ status: "ok", data, at: new Date() }))
         .catch((err) => !cancelled && setDetail((d) => ({ ...d, status: "error", error: err.message })));
     };
@@ -673,7 +687,7 @@ export function MatchDetailPage({ id, schedules, stories, onRetrySchedule, ensur
       cancelled = true;
       if (id2) clearInterval(id2);
     };
-  }, [match?.id, match?.state]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [match?.id, match?.state, epoch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!match) {
     const womenPending = !womenSchedule.data && womenSchedule.status !== "error";
@@ -718,7 +732,7 @@ export function MatchDetailPage({ id, schedules, stories, onRetrySchedule, ensur
                 <p className="text-[11px] text-white/60">{tzShort(match.date)}</p>
               </>
             ) : (
-              <p className="font-display text-4xl font-bold tabular-nums sm:text-5xl">{match.home.score ?? 0}–{match.away.score ?? 0}</p>
+              <p className="font-display text-4xl font-bold tabular-nums sm:text-5xl">{scoreLine(match.home.score, match.away.score)}</p>
             )}
             {match.home.shootout != null && <p className="text-[11px] text-white/70">Pens {match.home.shootout}–{match.away.shootout}</p>}
           </div>
@@ -744,9 +758,9 @@ export function MatchDetailPage({ id, schedules, stories, onRetrySchedule, ensur
       {detail.status === "loading" && !d && <SkeletonRows rows={6} avatar={false} />}
       {detail.status === "error" && !d && <ErrorState message={detail.error} title="Couldn’t load match details" />}
 
-      {d && match.state !== "pre" && <MatchReport match={match} detail={{ ...d, fetchedAt: detail.at }} related={related} />}
+      {d && match.state !== "pre" && <Deferred><MatchReport match={match} detail={{ ...d, fetchedAt: detail.at }} related={related} /></Deferred>}
       {match.state !== "post" || predictions?.preds?.[match.id] ? (
-        <PredictionBox match={match} predictions={predictions} squad={(womensMatch ? squads?.women : squads?.men) ?? []} events={d?.events} />
+        <Deferred><PredictionBox match={match} predictions={predictions} squad={(womensMatch ? squads?.women : squads?.men) ?? []} events={d?.events} /></Deferred>
       ) : null}
 
       {d && (
@@ -781,7 +795,7 @@ export function MatchDetailPage({ id, schedules, stories, onRetrySchedule, ensur
             <SectionHead title="Lineups" />
             <Panel className="p-4">
               {d.lineups.length ? (
-                <LineupPanel match={match} lineups={d.lineups} events={d.events} state={match.state} />
+                <Deferred><LineupPanel match={match} lineups={d.lineups} events={d.events} state={match.state} /></Deferred>
               ) : (
                 <EmptyState>{match.state === "pre" ? "Lineups are usually published about an hour before kick-off." : "Lineups weren’t published for this match."}</EmptyState>
               )}
@@ -808,4 +822,4 @@ export function MatchDetailPage({ id, schedules, stories, onRetrySchedule, ensur
   );
 }
 
-export { pickNext, HeroShell };
+export { HeroShell };
