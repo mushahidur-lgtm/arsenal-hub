@@ -94,7 +94,7 @@ export const test = base.extend({
     page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
     page.on("console", (m) => {
       // Mocked 4xx/5xx responses are logged by the browser itself; they are expected in failure tests.
-      if (m.type() === "error" && !/Failed to load resource|net::ERR|blocked by CORS|NetworkError/i.test(m.text())) problems.push(`console.error: ${m.text()}`);
+      if (m.type() === "error" && !/Failed to load resource|net::ERR|blocked by CORS|NetworkError|Cross-Origin Request Blocked|CORS request did not succeed/i.test(m.text())) problems.push(`console.error: ${m.text()}`);
     });
     await page.clock.setFixedTime(CAPTURED_AT);
     page.problems = problems;
