@@ -16,7 +16,7 @@ import { buildTransfers, namesToLookUp } from "./lib/transfers.js";
 import { searchHistory } from "./lib/history.js";
 import { readJSON, useBookmarks, usePersistentState, usePredictions, useRecents, useSavedPlayers, useWatchlist } from "./lib/storage.js";
 import { fmtLongDay, fmtTime, relDay, sameDay, timeAgo } from "./lib/format.js";
-import { Chips, Crest, EmptyState, ErrorBoundary, Panel, SectionHead, cx, useNow } from "./components/ui.jsx";
+import { Chips, Crest, EmptyState, ErrorBoundary, Panel, SectionError, SectionHead, Skel, SkeletonRows, cx, useNow } from "./components/ui.jsx";
 import { BriefingList, FanTalk, FeaturedSkeleton, FeaturedStory, NewsPage, StoryListSkeleton, StoryRow } from "./components/news.jsx";
 import { FormStrip, MatchCentrePage, MatchDetailPage, MatchList, NextMatchHero, StandingsTable } from "./components/matches.jsx";
 import { AvailabilityList, PlayerAvatar, PlayerProfilePage, SquadPage } from "./components/squad.jsx";
@@ -137,7 +137,7 @@ function Header({ route, dark, setDark, onRefresh, refreshing, openSearch, sourc
     <header className="sticky top-0 z-30 border-b border-line bg-surface/90 text-ink backdrop-blur supports-[backdrop-filter]:bg-surface/80">
       <div className="h-[3px] bg-brand" />
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
-        <a href="#/" className="flex shrink-0 items-center gap-2" aria-label="Arsenal Hub home">
+        <a href="#/" className="hit flex shrink-0 items-center gap-2" aria-label="Arsenal Hub home">
           <img src={CREST} alt="" width="28" height="28" className="h-7 w-7" />
           <span className="font-display text-[17px] font-bold tracking-tight">Arsenal <span className="text-accent">Hub</span></span>
         </a>
@@ -154,15 +154,15 @@ function Header({ route, dark, setDark, onRefresh, refreshing, openSearch, sourc
           <span className="mr-2 hidden text-[11px] text-ink-muted xl:block">
             <Freshness sources={sources} lastUpdated={lastUpdated} refreshing={refreshing} />
           </span>
-          <button onClick={openSearch} aria-label="Search" title="Search (/)" className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-surface-2 hover:text-ink">
+          <button onClick={openSearch} aria-label="Search" title="Search (/)" className="grid h-11 w-11 place-items-center rounded-full sm:h-9 sm:w-9 text-ink-muted hover:bg-surface-2 hover:text-ink">
             <Search size={18} />
           </button>
           <button onClick={onRefresh} disabled={refreshing} aria-label="Refresh news and data" title="Refresh"
-            className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-surface-2 hover:text-ink disabled:opacity-60">
+            className="grid h-11 w-11 place-items-center rounded-full sm:h-9 sm:w-9 text-ink-muted hover:bg-surface-2 hover:text-ink disabled:opacity-60">
             <RefreshCw size={17} className={cx(refreshing && "animate-spin")} />
           </button>
           <button onClick={() => setDark((d) => !d)} aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} title="Theme"
-            className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-surface-2 hover:text-ink">
+            className="grid h-11 w-11 place-items-center rounded-full sm:h-9 sm:w-9 text-ink-muted hover:bg-surface-2 hover:text-ink">
             {dark ? <Sun size={17} /> : <Moon size={17} />}
           </button>
         </div>
@@ -345,7 +345,7 @@ function SearchOverlay({ open, onClose, stories, schedules, squads, transfers })
 
 /* ───────────────────────── Homepage ───────────────────────── */
 
-function AtAGlance({ s }) {
+function AtAGlance({ s, load }) {
   const row = s.standings.data?.rows?.find((r) => r.id === TEAM_ID);
   const total = s.standings.data?.rows?.length;
   const leader = s.standings.data?.rows?.[0];
@@ -361,7 +361,7 @@ function AtAGlance({ s }) {
             <p className="font-display text-4xl font-bold leading-none text-ink">
               {row.rank}<span className="text-base text-ink-muted">{["th", "st", "nd", "rd"][(row.rank % 100 > 10 && row.rank % 100 < 14) ? 0 : row.rank % 10] ?? "th"}</span>
             </p>
-          ) : <p className="text-sm text-ink-muted">{s.standings.status === "error" ? "Table unavailable" : "Loading…"}</p>}
+          ) : s.standings.status === "error" ? <SectionError what="the table" error={s.standings.error} onRetry={() => load("standings")} /> : <Skel className="h-10 w-16" />}
         </div>
         {row && (
           <div className="text-right text-[13px]">
@@ -447,7 +447,7 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs, sav
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2"><NextMatchHero source={s.schedule} onRetry={() => load("schedule")} /></div>
-        <AtAGlance s={s} />
+        <AtAGlance s={s} load={load} />
       </div>
 
       {matchNews.length > 0 && (
@@ -461,7 +461,7 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs, sav
 
       <section>
         {newsLoading ? <FeaturedSkeleton /> : featured ? <FeaturedStory story={featured} bookmarks={bookmarks} now={now} />
-          : s.arsenalNews.status === "error" ? <Panel><EmptyState>News feeds are unavailable right now. Try refreshing.</EmptyState></Panel> : null}
+          : s.arsenalNews.status === "error" ? <Panel><SectionError what="news" error={s.arsenalNews.error} onRetry={() => load("arsenalNews")} /></Panel> : null}
         {briefing.length > 1 && (
           <div className="mt-4">
             <SectionHead eyebrow="Daily briefing" title="Five things to know" />
@@ -477,22 +477,22 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs, sav
           <Chips options={HOME_FILTERS} value={homeCat} onChange={(v) => setPrefs((p) => ({ ...p, homeCategory: v }))} className="mb-1" />
           <div className="divide-y divide-line">
             {newsLoading ? <StoryListSkeleton rows={5} /> : latest.length ? latest.map((st) => <StoryRow key={st.id} story={st} bookmarks={bookmarks} now={now} />)
-              : <EmptyState>{s.arsenalNews.status === "error" && !s.arsenalNews.data ? "News unavailable." : "No stories in this category right now."}</EmptyState>}
+              : s.arsenalNews.status === "error" && !s.arsenalNews.data ? <SectionError what="news" error={s.arsenalNews.error} onRetry={() => load("arsenalNews")} /> : <EmptyState>No stories in this category right now.</EmptyState>}
           </div>
         </section>
 
         <aside className="space-y-8">
           <section>
             <SectionHead title="Transfer watch" href="#/transfers" />
-            <Panel className="overflow-hidden"><TransferWatch entries={transfers} unavailable={s.arsenalNews.status === "error" && !s.arsenalNews.data} /></Panel>
+            <Panel className="overflow-hidden"><TransferWatch entries={transfers} unavailable={s.arsenalNews.status === "error" && !s.arsenalNews.data} loading={newsLoading} onRetry={() => load("arsenalNews")} /></Panel>
           </section>
           <section>
             <SectionHead title="Upcoming" href="#/matches" linkLabel="All fixtures" />
-            <Panel className="overflow-hidden"><MatchList matches={fixtures.slice(0, 3)} dense empty={s.schedule.status === "error" ? "Fixtures unavailable." : s.schedule.data ? "No fixtures announced." : "Loading…"} /></Panel>
+            <Panel className="overflow-hidden"><MatchList matches={fixtures.slice(0, 3)} dense empty={s.schedule.status === "error" && !s.schedule.data ? <SectionError what="fixtures" error={s.schedule.error} onRetry={() => load("schedule")} /> : s.schedule.data ? "No fixtures announced." : <SkeletonRows rows={2} />} /></Panel>
           </section>
           <section>
             <SectionHead title="Recent results" href="#/matches" />
-            <Panel className="overflow-hidden"><MatchList matches={results.filter((m) => !m.friendly).slice(0, 3)} dense empty={s.schedule.status === "error" ? "Results unavailable." : s.schedule.data ? "No results yet." : "Loading…"} /></Panel>
+            <Panel className="overflow-hidden"><MatchList matches={results.filter((m) => !m.friendly).slice(0, 3)} dense empty={s.schedule.status === "error" && !s.schedule.data ? <SectionError what="results" error={s.schedule.error} onRetry={() => load("schedule")} /> : s.schedule.data ? "No results yet." : <SkeletonRows rows={2} />} /></Panel>
           </section>
           <section>
             <SectionHead title="Premier League" href="#/matches" linkLabel="Full table" />
@@ -500,7 +500,7 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs, sav
           </section>
           <section>
             <SectionHead title="Injuries & doubts" href="#/squad" linkLabel="Squad" />
-            <Panel className="overflow-hidden"><AvailabilityList source={s.roster} limit={5} /></Panel>
+            <Panel className="overflow-hidden"><AvailabilityList source={s.roster} limit={5} onRetry={() => load("roster")} /></Panel>
             <p className="mt-1.5 text-[11px] text-ink-muted">From ESPN injury reports, which can lag club updates.</p>
           </section>
           <section>

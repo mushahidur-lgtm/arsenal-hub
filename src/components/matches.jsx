@@ -219,7 +219,7 @@ export function FormStrip({ results, n = 5, size = "h-7 w-7 text-xs" }) {
   return (
     <div className="flex gap-1.5">
       {form.map((m) => (
-        <a key={m.id} href={`#/matches/${m.id}`} title={`${m.isHome ? "vs" : "at"} ${m.opp?.name} ${m.ars?.score}–${m.opp?.score} (${m.compShort}, ${fmtDay(m.date)})`}>
+        <a key={m.id} href={`#/matches/${m.id}`} className="hit" title={`${m.isHome ? "vs" : "at"} ${m.opp?.name} ${m.ars?.score}–${m.opp?.score} (${m.compShort}, ${fmtDay(m.date)})`}>
           <ResultPill r={m.result} className={size} />
         </a>
       ))}

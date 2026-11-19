@@ -48,6 +48,15 @@ describe("fetchJSON error handling", () => {
     vi.stubGlobal("fetch", f);
     await expect(data.fetchJSON(url())).resolves.toEqual({ via: "proxy" });
   });
+  it("gives up on hanging proxies once the 5s overall budget is spent", async () => {
+    vi.useFakeTimers();
+    const hang = (_u, { signal }) => new Promise((_r, rej) => signal.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+    vi.stubGlobal("fetch", vi.fn((u, init) => (String(u).startsWith("https://site.api.espn.com") ? Promise.reject(new TypeError("blocked")) : hang(u, init))));
+    const p = data.fetchJSON(url());
+    const assertion = expect(p).rejects.toMatchObject({ message: expect.stringContaining("proxies") });
+    await vi.advanceTimersByTimeAsync(5100);
+    await assertion; // settled within ~5s, not 9s + 9s + 9s
+  });
   it("aborts slow requests and reports a timeout", async () => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn((_u, { signal }) => new Promise((_res, rej) => signal.addEventListener("abort", () => rej(Object.assign(new Error("aborted"), { name: "AbortError" }))))));

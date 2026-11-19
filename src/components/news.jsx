@@ -56,7 +56,7 @@ function BookmarkButton({ article, bookmarks, className }) {
       aria-label={on ? "Remove from saved" : "Save article"}
       aria-pressed={on}
       title={on ? "Saved" : "Save for later"}
-      className={cx("grid h-8 w-8 shrink-0 place-items-center rounded-full transition hover:bg-surface-2", on ? "text-accent" : "text-ink-muted", className)}
+      className={cx("hit grid h-8 w-8 shrink-0 place-items-center rounded-full transition hover:bg-surface-2", on ? "text-accent" : "text-ink-muted", className)}
     >
       {on ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
     </button>
@@ -110,7 +110,7 @@ function CoverageToggle({ story, open, setOpen }) {
     <button
       onClick={(e) => { e.preventDefault(); setOpen((o) => !o); }}
       aria-expanded={open}
-      className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-1 text-[11px] font-semibold text-ink hover:bg-line"
+      className="hit inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-1 text-[11px] font-semibold text-ink hover:bg-line"
     >
       <Layers size={12} />
       {n > 1 ? `${n} outlets` : `${story.articles.length} articles`}
@@ -410,7 +410,7 @@ function BriefingItem({ story, index, open, onToggle, bookmarks, now }) {
           {story.summary && <p className={cx("mt-1 text-[13px] leading-relaxed text-ink-muted", !open && "line-clamp-2")}>{story.summary}</p>}
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <Meta article={a} now={now} />
-            <button onClick={onToggle} className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
+            <button onClick={onToggle} className="hit inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
               {open ? "Less" : "Expand"} <ChevronDown size={12} className={cx("transition", open && "rotate-180")} />
             </button>
           </div>

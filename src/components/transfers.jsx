@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown, Eye, EyeOff, FileSignature, Info, Newspaper } from "lucide-react";
 import { DIRECTIONS, STATUSES, subjectKey, timelineOf, windowInfo } from "../lib/transfers.js";
 import { fmtDay, fmtFull, timeAgo } from "../lib/format.js";
-import { Chips, EmptyState, Panel, SectionHead, Skel, Thumb, cx, useNow } from "./ui.jsx";
+import { Chips, EmptyState, Panel, SectionError, SectionHead, Skel, SkeletonRows, Thumb, cx, useNow } from "./ui.jsx";
 import { TierBadge } from "./news.jsx";
 import { PlayerAvatar } from "./squad.jsx";
 
@@ -96,7 +96,7 @@ function WatchButton({ entry, watch, className }) {
       onClick={() => (on ? watch.remove(key) : watch.add({ key, name: entry.player?.name ?? entry.headline, status: entry.status, links: linksOf(entry) }))}
       aria-pressed={on}
       title={on ? "Remove from watchlist" : "Add to watchlist"}
-      className={cx("inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition", on ? "border-brand bg-brand/10 text-accent" : "border-line text-ink-muted hover:text-ink", className)}
+      className={cx("hit inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition", on ? "border-brand bg-brand/10 text-accent" : "border-line text-ink-muted hover:text-ink", className)}
     >
       {on ? <EyeOff size={12} /> : <Eye size={12} />} {on ? "Watching" : "Watch"}
     </button>
@@ -166,7 +166,7 @@ function TransferCard({ e, now, watch }) {
           <span title={e.updated ? fmtFull(e.updated) : ""}>Updated {e.updated ? timeAgo(e.updated, now) : "—"}</span>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
+          <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="hit inline-flex items-center gap-1 text-[11px] font-semibold text-accent">
             {open ? "Hide" : "Show"} timeline ({count} report{count > 1 ? "s" : ""}) <ChevronDown size={12} className={cx("transition", open && "rotate-180")} />
           </button>
           <WatchButton entry={e} watch={watch} />
@@ -375,12 +375,16 @@ export function TransfersPage({ entries, loading, failed, prefs, setPrefs, archi
 }
 
 /** Homepage: the most significant transfer items. */
-export function TransferWatch({ entries, limit = 4, unavailable }) {
+export function TransferWatch({ entries, limit = 4, unavailable, loading, onRetry }) {
   const top = [...entries]
     .filter((e) => e.status !== "dismissed" && (e.direction !== "general" || e.reliableOutlets.length))
     .sort((a, b) => STATUSES[b.status].rank - STATUSES[a.status].rank || (b.updated ?? 0) - (a.updated ?? 0))
     .slice(0, limit);
-  if (!top.length) return <EmptyState>{unavailable ? "News feeds unavailable." : "No transfer reports in the feeds right now."}</EmptyState>;
+  if (!top.length) {
+    if (loading) return <SkeletonRows rows={3} />;
+    if (unavailable) return <SectionError what="transfer reports" onRetry={onRetry} />;
+    return <EmptyState>No transfer reports in the feeds right now.</EmptyState>;
+  }
   return (
     <ul className="divide-y divide-line">
       {top.map((e) => (
