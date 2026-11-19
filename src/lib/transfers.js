@@ -164,7 +164,7 @@ export function buildTransfers(stories, ctx = {}) {
     if (squadSubject) {
       const p = squadSubject.player;
       subject = p.name;
-      player = { name: p.name, position: p.position, group: p.group, age: p.age, club: "Arsenal", photo: p.photo, inSquad: true, link: p.link };
+      player = { name: p.name, position: p.position, group: p.group, age: p.age, club: "Arsenal", photo: p.photo, dob: p.dob ?? null, inSquad: true, link: p.link };
     } else if (!squadIds.length) {
       const names = [...new Set(arts.flatMap((a) => candidateNames(a.title, { exclude: squadNames })))];
       for (const n of names) {
@@ -278,4 +278,22 @@ export function windowInfo(now = new Date()) {
   if (m >= 5 && m <= 7) return { open: true, name: `Summer ${y} window`, timing: "usually closes around 1 September" };
   if (m >= 8) return { open: false, name: `January ${y + 1} window`, timing: "opens on 1 January" };
   return { open: false, name: `Summer ${y} window`, timing: "usually opens in mid-June" };
+}
+
+/** The four steps shown on a transfer card's stepper. */
+export const STEPS = ["Rumour", "Talks", "Agreed", "Complete"];
+
+/**
+ * Which step a status sits on (index into STEPS), or null when a stepper makes no sense (dismissed).
+ * "Reported complete" and "Confirmed" both sit on the last step; the status badge beside the
+ * stepper says which of the two it is, so a single report is never shown as official.
+ */
+export function stepOf(status) {
+  switch (status) {
+    case "speculation": case "monitoring": case "interest": return 0;
+    case "strong": return 1;
+    case "advanced": return 2;
+    case "done": case "confirmed": return 3;
+    default: return null;
+  }
 }

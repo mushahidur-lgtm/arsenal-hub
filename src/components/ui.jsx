@@ -196,14 +196,16 @@ export function ArsenalMark({ className }) {
 
 const RESULT_STYLE = {
   W: "bg-emerald-600 text-white",
-  D: "bg-zinc-400 text-white dark:bg-zinc-500",
+  D: "bg-zinc-600 text-white dark:bg-zinc-500",
   L: "bg-brand text-white",
 };
 const RESULT_WORD = { W: "Win", D: "Draw", L: "Loss" };
+// Shape as well as colour and letter: win = square, draw = circle, loss = diamond.
+const RESULT_SHAPE = { W: "rounded-md", D: "rounded-full", L: "[clip-path:polygon(50%_0,100%_50%,50%_100%,0_50%)]" };
 
 export function ResultPill({ r, className = "h-6 w-6 text-xs" }) {
   return (
-    <span aria-label={RESULT_WORD[r] ?? "No result"} className={cx("grid shrink-0 place-items-center rounded-md font-bold", RESULT_STYLE[r] ?? "bg-surface-2", className)}>
+    <span aria-label={RESULT_WORD[r] ?? "No result"} role="img" className={cx("grid shrink-0 place-items-center font-bold", RESULT_SHAPE[r] ?? "rounded-md", RESULT_STYLE[r] ?? "bg-surface-2", className)}>
       {r ?? "–"}
     </span>
   );

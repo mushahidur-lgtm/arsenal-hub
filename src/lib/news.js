@@ -63,7 +63,7 @@ function headlineEntities(title, extraGeneric) {
 const CONCEPTS = {
   death: /\b(dies|died|dead|death|passed away|tribute|tributes|obituary|mourn\w*|rip)\b/,
   contract: /\b(contract|renew\w*|extension|extend\w* (his |their )?(contract|deal|stay)|new deal|new [\w-]+( [\w-]+)? deal|\w+-year deal|long-term deal|signs? new|commit\w* (his )?future|wages?|salary|pay rise)\b/,
-  transfer: /\b(transfer|bid|bids|offer|target\w*|interest\w*|swap|loan\w*|approach\w*|pursu\w*|chase|eyes|eyeing|monitor\w*|wants? to sign|keen on|fee|linked|signing|sign|signs|signed|move|exit|sale|sell|depart\w*|talks)\b/,
+  transfer: /\b(transfers?|window|bid|bids|offer|target\w*|interest\w*|swap|loan\w*|approach\w*|pursu\w*|chase|eyes|eyeing|monitor\w*|wants? to sign|keen on|fee|linked|signing|sign|signs|signed|move|exit|sale|sell|depart\w*|talks)\b|[£€]\s?\d/,
   injury: /\b(injur\w*|hamstring|knee|ankle|groin|calf|thigh|muscle|fitness|setback|scan|sidelined|ruled out|surgery|knock|doubt|absence|layoff|recovery|return\w* to training|behind-closed-doors)\b/,
   match: /\b(win|wins|won|beat|beats|beaten|draw|draws|drew|defeat\w*|lose|loses|lost|victory|thrash\w*|held|stun\w*|ratings|player ratings|match report|preview|line-?up|team news|predicted|starting xi|kick-?off|result|comeback|clash|winner|equaliser|scores?|\d+-\d+)\b/,
   discipline: /\b(ban|banned|suspend\w*|red card|charged|fa charge|sent off)\b/,
@@ -105,10 +105,12 @@ function categorize(a) {
   const title = fold(a.title);
   const cats = new Set();
   if (a.tier === "official") cats.add("official");
-  if (a.concepts.has("match") && !a.titleConcepts.has("death")) cats.add("match");
   // Transfer talk is judged on the headline only: summaries mention "signing" far too loosely.
   // Awards and obituaries that happen to use "wants"/"move" aren't transfer stories.
   const notTransfer = a.titleConcepts.has("award") || a.titleConcepts.has("death");
+  const transferHeadline = !notTransfer && (a.titleConcepts.has("transfer") || a.titleConcepts.has("contract"));
+  // A transfer/window/£ headline is a transfer story even if its summary mentions a result.
+  if (a.concepts.has("match") && !a.titleConcepts.has("death") && !(transferHeadline && !a.titleConcepts.has("match"))) cats.add("match");
   if (!notTransfer && (a.titleConcepts.has("transfer") || a.titleConcepts.has("contract"))) cats.add("transfer");
   if (a.concepts.has("injury")) cats.add("injury");
   if (a.scope === "ucl" || /\bchampions league\b|\bucl\b/.test(text)) cats.add("ucl");
