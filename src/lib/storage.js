@@ -4,10 +4,27 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
+const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+/** True when `value` has the same basic shape as `fallback` (array / object / primitive). */
+function sameShape(value, fallback) {
+  if (Array.isArray(fallback)) return Array.isArray(value);
+  if (isPlainObject(fallback)) return isPlainObject(value);
+  if (fallback === null || fallback === undefined) return true;
+  return typeof value === typeof fallback;
+}
+
+/**
+ * Reads and parses a stored value. Anything unusable (missing, unparseable, or a
+ * different shape than the caller expects, e.g. `null` or a string where an
+ * object is needed) yields `fallback`, so corrupted storage can never crash a hook.
+ */
 export function readJSON(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
-    return raw == null ? fallback : JSON.parse(raw);
+    if (raw == null) return fallback;
+    const parsed = JSON.parse(raw);
+    return sameShape(parsed, fallback) ? parsed : fallback;
   } catch {
     return fallback;
   }
@@ -52,7 +69,7 @@ const ARCHIVE_MAX = 400;
  */
 export function mergeWithArchive(items) {
   const cutoff = Date.now() - ARCHIVE_DAYS * 86400e3;
-  const prev = readJSON(ARCHIVE_KEY, []).map((i) => ({
+  const prev = readJSON(ARCHIVE_KEY, []).filter(isPlainObject).map((i) => ({
     ...i,
     date: i.date ? new Date(i.date) : null,
     updated: i.updated ? new Date(i.updated) : null,

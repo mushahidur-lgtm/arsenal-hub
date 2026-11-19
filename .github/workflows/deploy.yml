@@ -31,6 +31,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Gate: nothing is published unless these pass. (No lint step: the project has no linter configured.)
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # Builds the site, serves it at /arsenal-hub/ and replays recorded API responses (no live APIs).
+      - name: End-to-end tests (Chromium)
+        run: npx playwright test --project=chromium
+
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
       - name: Build
         run: npm run build
 

@@ -223,7 +223,7 @@ export function Chips({ options, value, onChange, className, size = "sm" }) {
             )}
           >
             {o.label}
-            {o.count != null && <span className={cx("ml-1.5 tabular-nums", active ? "text-white/80" : "opacity-60")}>{o.count}</span>}
+            {o.count != null && <span className={cx("ml-1.5 tabular-nums", active ? "text-white" : "")}>{o.count}</span>}
           </button>
         );
       })}
@@ -232,11 +232,12 @@ export function Chips({ options, value, onChange, className, size = "sm" }) {
 }
 
 /** Native select styled to match. */
-export function Select({ value, onChange, options, label, className }) {
+export function Select({ value, onChange, options, label, ariaLabel, className }) {
   return (
     <label className={cx("inline-flex items-center gap-1.5 text-xs text-ink-muted", className)}>
       {label && <span className="hidden sm:inline">{label}</span>}
       <select
+        aria-label={ariaLabel ?? label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink focus:outline-none"

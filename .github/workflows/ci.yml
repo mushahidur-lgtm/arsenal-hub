@@ -1,0 +1,67 @@
+name: CI
+
+# Runs the same gates as the deploy workflow, on pull requests and on branches other than main
+# (pushes to main are tested by deploy.yml, which refuses to publish a build that fails them).
+# This workflow never deploys anything.
+#
+# There is no lint step because the project has no linter configured; add one here (and to
+# package.json) if ESLint is ever introduced.
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-and-build:
+    name: Unit tests and production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Unit and integration tests
+        run: npm test
+      - name: Production build (base path /arsenal-hub/)
+        run: npm run build
+
+  e2e:
+    name: End-to-end (${{ matrix.browser }})
+    needs: unit-and-build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install browser
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+      # Playwright builds the site and serves it at /arsenal-hub/; third-party APIs are replayed from
+      # recorded responses, so this never depends on live data providers.
+      - name: Playwright tests
+        run: npx playwright test --project=${{ matrix.browser }}
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.browser }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

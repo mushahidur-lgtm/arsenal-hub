@@ -231,7 +231,7 @@ export function SquadPage({ team, source, onRetry, injuryStories, bookmarks, now
                     if (!list.length) return null;
                     return (
                       <div key={g}>
-                        <h3 className="eyebrow mb-2 text-ink-muted">{g}</h3>
+                        <h2 className="eyebrow mb-2 text-ink-muted">{g}</h2>
                         <div className="grid gap-2.5 sm:grid-cols-2">{list.map((p) => <PlayerCard key={p.id} p={p} team={team} saved={saved} />)}</div>
                       </div>
                     );
@@ -365,8 +365,8 @@ export function PlayerProfilePage({ id, team, roster, stories, bookmarks, saved,
           <div>
             <SectionHead title="Season statistics" />
             <div className="mb-3 flex flex-wrap gap-2">
-              <Select value={comp} onChange={(v) => setComp(v)} options={compOptions} />
-              {seasons.length > 0 && <Select value={season ?? ""} onChange={setSeason} options={seasons.map((s) => ({ id: s, label: s }))} />}
+              <Select ariaLabel="Competition" value={comp} onChange={(v) => setComp(v)} options={compOptions} />
+              {seasons.length > 0 && <Select ariaLabel="Season" value={season ?? ""} onChange={setSeason} options={seasons.map((s) => ({ id: s, label: s }))} />}
             </div>
             <Panel className="p-4">
               {stats.status === "loading" ? (

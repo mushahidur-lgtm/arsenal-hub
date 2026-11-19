@@ -16,8 +16,11 @@ export const fmtFull = (d) => fmtDate(d, { dateStyle: "medium", timeStyle: "shor
 export const tzShort = (d) =>
   new Intl.DateTimeFormat(undefined, { timeZoneName: "short" }).formatToParts(d ?? new Date()).find((p) => p.type === "timeZoneName")?.value ?? "";
 
-export function timeAgo(d, now = Date.now()) {
-  if (!d) return "";
+export function timeAgo(input, now = Date.now()) {
+  if (!input) return "";
+  // Dates restored from storage arrive as ISO strings.
+  const d = validDate(input) ? input : new Date(input);
+  if (!validDate(d)) return "";
   const s = Math.round((now - d.getTime()) / 1000);
   if (s < 0) return "just now";
   if (s < 60) return "just now";

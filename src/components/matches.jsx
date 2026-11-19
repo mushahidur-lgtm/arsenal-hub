@@ -111,7 +111,7 @@ export function NextMatchHero({ source, onRetry }) {
   const kickedOff = !inPlay && next.date.getTime() <= now;
   return (
     <HeroShell>
-      <a href={`#/matches/${next.id}`} className="block p-5 sm:p-6" aria-label={`Match details: ${next.home.name} v ${next.away.name}`}>
+      <a href={`#/matches/${next.id}`} className="block p-5 sm:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-widest">
           {inPlay ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand px-2.5 py-1">
@@ -479,7 +479,7 @@ function EventRow({ e, homeId }) {
       <div className="flex items-center justify-end gap-2">{home && body}</div>
       <div className="flex w-14 items-center justify-center gap-1.5" title={icon.label}>
         <span className="w-7 text-right text-[11px] font-semibold tabular-nums text-ink-muted">{e.minute}</span>
-        <span aria-label={icon.label}>{icon.el}</span>
+        <span role="img" aria-label={icon.label}>{icon.el}</span>
       </div>
       <div className="flex items-center gap-2">{!home && body}</div>
     </li>
@@ -568,6 +568,7 @@ export function MatchDetailPage({ id, schedules, stories, onRetrySchedule, ensur
       <a href="#/matches" className="inline-flex items-center gap-1 text-sm font-semibold text-accent"><ArrowLeft size={14} /> Match Centre</a>
 
       <HeroShell className="p-5 sm:p-7">
+        <h1 className="sr-only">{match.home.name} v {match.away.name}, {match.competition}</h1>
         <div className="mb-4 flex flex-wrap items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-widest">
           <span className="rounded-full bg-white/10 px-2.5 py-1">{match.competition}</span>
           <span className="rounded-full bg-white/10 px-2.5 py-1">{done ? "Full time" : match.state === "in" ? `In play · ${match.clock}` : "Upcoming"}</span>

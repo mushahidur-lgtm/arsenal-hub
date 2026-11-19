@@ -210,8 +210,8 @@ export function ComparePage({ team, roster, onRetry, ids, setIds, prefs, setPref
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-2">
-                <Select value={activeComp} onChange={(v) => setPrefs((p) => ({ ...p, compareComp: v }))} options={compOptions} />
-                {seasons.length > 0 && <Select value={season ?? ""} onChange={setSeason} options={seasons.map((s) => ({ id: s, label: s }))} />}
+                <Select ariaLabel="Competition" value={activeComp} onChange={(v) => setPrefs((p) => ({ ...p, compareComp: v }))} options={compOptions} />
+                {seasons.length > 0 && <Select ariaLabel="Season" value={season ?? ""} onChange={setSeason} options={seasons.map((s) => ({ id: s, label: s }))} />}
               </div>
 
               {!seasons.length || !dA ? (

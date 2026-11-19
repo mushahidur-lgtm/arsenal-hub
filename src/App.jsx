@@ -42,7 +42,10 @@ const NAV = [
 function parseHash() {
   const raw = window.location.hash.replace(/^#\/?/, "");
   const [path, qs] = raw.split("?");
-  const parts = path.split("/").filter(Boolean).map((p) => decodeURIComponent(p));
+  // A hand-typed or truncated link such as #/%E0%A4%A is not valid percent-encoding;
+  // decodeURIComponent would throw and blank the whole app, so keep the raw segment instead.
+  const safeDecode = (p) => { try { return decodeURIComponent(p); } catch { return p; } };
+  const parts = path.split("/").filter(Boolean).map(safeDecode);
   const first = parts[0] ?? "";
   // Legacy tab ids from earlier versions of the site
   const legacy = { overview: "home", fixtures: "matches", stats: "matches" }[first];
@@ -93,7 +96,7 @@ function useIntelligence(s) {
     [rawNews, rawWorld, keys]
   );
   const [lookups, setLookups] = useState(() =>
-    Object.fromEntries(Object.entries(readJSON("afc-player-lookup-v2", {})).filter(([, v]) => !v.miss))
+    Object.fromEntries(Object.entries(readJSON("afc-player-lookup-v2", {})).filter(([, v]) => v && typeof v === "object" && !v.miss))
   );
   useEffect(() => {
     if (!stories.length) return undefined;
@@ -214,10 +217,33 @@ function BottomNav({ route }) {
 function SearchOverlay({ open, onClose, stories, schedules, squads, transfers }) {
   const [q, setQ] = useState("");
   const inputRef = useRef(null);
+  const dialogRef = useRef(null);
+  const returnFocus = useRef(null);
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 0);
-    else setQ("");
+    if (open) {
+      returnFocus.current = document.activeElement ?? document.body;
+      setTimeout(() => inputRef.current?.focus(), 0);
+    } else {
+      setQ("");
+      // Hand focus back to whatever opened the dialog so keyboard users keep their place. When
+      // it was opened with "/" from nowhere in particular, land on the page content instead of
+      // losing focus to the end of the document.
+      const el = returnFocus.current;
+      returnFocus.current = null;
+      if (el) (el !== document.body && el.isConnected ? el : document.getElementById("main"))?.focus?.();
+    }
   }, [open]);
+  // Keep Tab / Shift+Tab inside the dialog while it is open (aria-modal alone doesn't do this).
+  const trapTab = (e) => {
+    if (e.key !== "Tab") return;
+    const items = [...dialogRef.current.querySelectorAll("a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex='-1'])")].filter((n) => n.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    else if (!dialogRef.current.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+  };
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -247,7 +273,7 @@ function SearchOverlay({ open, onClose, stories, schedules, squads, transfers })
     </div>
   );
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true" aria-label="Search">
+    <div ref={dialogRef} onKeyDown={trapTab} className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true" aria-label="Search">
       <div className="mx-auto mt-0 max-w-xl bg-surface p-3 shadow-2xl sm:mt-16 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <form onSubmit={(e) => { e.preventDefault(); if (term) go(`#/news?q=${encodeURIComponent(q.trim())}`); }} className="flex items-center gap-2 border-b border-line pb-2">
           <Search size={18} className="ml-1 text-ink-muted" />

@@ -132,3 +132,20 @@ ESPN's free player data has no minutes, xG/xA, key passes, tackles or intercepti
 ### Personal data (this device only)
 Preferences and filters, saved articles, followed players, the transfer watchlist, fan predictions and recent pages are stored in `localStorage`. Nothing is sent anywhere.
 
+
+## Testing
+
+| Command | What it runs |
+|---|---|
+| `npm test` | Vitest unit/integration tests (`tests/unit`): news grouping, credibility, transfers, parsers, fetch/retry/cache layer, local-storage handling. |
+| `npm run test:e2e` | Playwright end-to-end tests (`tests/e2e`) in Chromium, Firefox and WebKit against the **production build** served at `/arsenal-hub/`. |
+| `npm run test:e2e:chromium` | Same, Chromium only (quickest). |
+| `npm run record-fixtures` | Re-records the real API responses the e2e suite replays. |
+
+The e2e suite never calls live APIs: every third-party host is replayed from responses recorded from the real providers
+(`tests/e2e/fixtures`, captured at the time in `captured-at.json`, and the browser clock is frozen to that time). Anything
+not replayed is blocked, so a test can't silently depend on the internet. Failure tests (HTTP 500/404/429, invalid JSON,
+CORS/network errors, slow responses, stale or corrupted storage) inject faults on top of the same replay.
+
+First run: `npx playwright install` to download the browsers. CI (`.github/workflows/ci.yml`) runs all of this on pull
+requests; `deploy.yml` runs the unit tests and the Chromium e2e suite before it builds and publishes.

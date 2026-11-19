@@ -343,8 +343,8 @@ export function NewsPage({ stories, sources, load, bookmarks, prefs, setPrefs, q
             )}
           </label>
           <Select label="Sort" value={sort} onChange={set("newsSort")} options={Object.entries(SORTS).map(([id, s]) => ({ id, label: s.label }))} />
-          <Select value={srcFilter} onChange={set("newsSources")} options={SOURCE_FILTERS} />
-          {playerOptions.length > 1 && <Select value={playerOptions.some((o) => o.id === playerId) ? playerId : "all"} onChange={set("newsPlayer")} options={playerOptions} />}
+          <Select ariaLabel="Source filter" value={srcFilter} onChange={set("newsSources")} options={SOURCE_FILTERS} />
+          {playerOptions.length > 1 && <Select ariaLabel="Player filter" value={playerOptions.some((o) => o.id === playerId) ? playerId : "all"} onChange={set("newsPlayer")} options={playerOptions} />}
         </div>
       </div>
 
@@ -371,6 +371,7 @@ export function NewsPage({ stories, sources, load, bookmarks, prefs, setPrefs, q
           <ErrorState message={arsenalNews.error} onRetry={() => load("arsenalNews")} />
         ) : filtered.length ? (
           <>
+            <h2 className="sr-only">Stories</h2>
             <div className="divide-y divide-line">
               {filtered.slice(0, limit).map((s) => <StoryRow key={s.id} story={s} bookmarks={bookmarks} now={now} />)}
             </div>

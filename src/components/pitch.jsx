@@ -37,7 +37,7 @@ function Marker({ pt, events, selected, onSelect, tone }) {
     <button
       onClick={() => onSelect(p)}
       aria-pressed={selected}
-      aria-label={`${p.name}, ${p.positionName || p.position}${p.jersey ? `, number ${p.jersey}` : ""}`}
+      aria-label={`${[p.jersey, surname].filter(Boolean).join(" ")}: ${p.name}, ${p.positionName || p.position}`}
       style={{ left: `${x}%`, top: `${y}%` }}
       className="group absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 outline-none"
     >
@@ -51,6 +51,7 @@ function Marker({ pt, events, selected, onSelect, tone }) {
         {carded && <span className={cx("absolute -left-1 -top-1 h-3 w-2 rounded-[2px]", carded === "red" ? "bg-red-600" : "bg-yellow-400")} />}
         {off && <ArrowDownRight size={12} className="absolute -bottom-1 -right-1 rounded-full bg-white text-red-600" />}
       </span>
+      {" "}
       <span className="max-w-[4.5rem] truncate rounded bg-black/55 px-1 text-[10px] font-semibold leading-tight text-white sm:max-w-[5.5rem] sm:text-[11px]">{surname}</span>
     </button>
   );
