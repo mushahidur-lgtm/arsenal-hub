@@ -14,7 +14,7 @@ test.describe("Journey 1: homepage", () => {
     await expect(page.getByRole("heading", { level: 1 })).toContainText(/Arsenal briefing|matchday/i);
     // Next match comes from the recorded schedule (frozen clock = capture time).
     await expect(page.locator("main a[href^=\"#/matches/\"]").filter({ hasText: /Next match/i }).first()).toBeVisible();
-    await expect(page.getByText("Five things to know")).toBeVisible();
+    await expect(page.getByText(/The top \d+ stories/)).toBeVisible();
 
     // Open the top story: it must point at the publisher, in a new tab, safely.
     const top = page.getByRole("link", { name: "Read at ESPN" }).first();
@@ -29,7 +29,7 @@ test.describe("Journey 1: homepage", () => {
     // Navigate away and back: the page is intact.
     await page.goto("./#/news");
     await page.goBack();
-    await expect(page.getByText("Five things to know")).toBeVisible();
+    await expect(page.getByText(/The top \d+ stories/)).toBeVisible();
     expect(net.unrouted.filter((u) => !/fonts\.(googleapis|gstatic)/.test(u))).toEqual([]);
     noProblems(page);
   });
@@ -38,7 +38,7 @@ test.describe("Journey 1: homepage", () => {
     net.override((u) => /\/teams\/359\/schedule/.test(u.pathname), () => ({ status: 500, headers: { "access-control-allow-origin": "*" }, body: "{}" }));
     await open(page);
     await expect(page.locator("main a[href^=\"#/matches/\"]").filter({ hasText: /Next match/i })).toHaveCount(0);
-    await expect(page.getByText("Five things to know")).toBeVisible(); // news is independent of the schedule
+    await expect(page.getByText(/The top \d+ stories/)).toBeVisible(); // news is independent of the schedule
   });
 });
 

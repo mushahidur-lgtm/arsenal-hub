@@ -34,7 +34,7 @@ for (const [failure, makeResponse] of Object.entries(FAILURES)) {
         await page.goto("./");
         await settled(page);
         // The news-driven briefing is unaffected.
-        await expect(page.getByText("Five things to know")).toBeVisible();
+        await expect(page.getByText(/The top \d+ stories/)).toBeVisible();
         expect(page.problems).toEqual([]);
         // The other pages still load.
         await page.goto("./#/news");
@@ -134,7 +134,11 @@ test.describe("failed data is never presented as fresh or as zero", () => {
     net.override(SOURCES.standings, () => respond(500));
     await page.goto("./");
     await settled(page);
-    for (const what of ["the table", "fixtures", "results"]) await expect(page.getByText(`Couldn’t load ${what}`).first()).toBeVisible();
+    await expect(page.getByText("Couldn’t load the table").first()).toBeVisible();
+    await page.getByRole("tablist").first().getByRole("tab", { name: "Fixtures" }).click();
+    for (const what of ["fixtures", "results"]) await expect(page.getByText(`Couldn’t load ${what}`).first()).toBeVisible();
+    await page.getByRole("tablist").first().getByRole("tab", { name: "Table" }).click();
+    await expect(page.getByText("Couldn’t load the table").first()).toBeVisible();
     expect(await page.getByRole("button", { name: /retry/i }).count()).toBeGreaterThanOrEqual(3);
     await expect(page.getByText(/^Loading…$/)).toHaveCount(0);
   });
@@ -148,7 +152,7 @@ test.describe("loading and slow sources", () => {
     });
     await page.goto("./");
     // News renders while standings is still pending.
-    await expect(page.getByText("Five things to know")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/The top \d+ stories/)).toBeVisible({ timeout: 5000 });
     await expect(page.locator('[aria-busy="true"], .animate-pulse, [role="status"]').first()).toBeVisible();
     // ...and the slow source eventually arrives.
     await expect(page.getByText(/At a glance/i)).toBeVisible();
@@ -196,7 +200,7 @@ test.describe("cached data is shown and labelled", () => {
     });
     await page.goto("./");
     await settled(page);
-    await expect(page.getByText("Five things to know")).toBeVisible();
+    await expect(page.getByText(/The top \d+ stories/)).toBeVisible();
     expect(page.problems).toEqual([]);
   });
 });

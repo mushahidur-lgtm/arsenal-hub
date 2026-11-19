@@ -16,7 +16,7 @@ import { buildTransfers, namesToLookUp } from "./lib/transfers.js";
 import { searchHistory } from "./lib/history.js";
 import { readJSON, useBookmarks, usePersistentState, usePredictions, useRecents, useSavedPlayers, useWatchlist } from "./lib/storage.js";
 import { fmtLongDay, fmtTime, relDay, sameDay, timeAgo } from "./lib/format.js";
-import { Chips, Crest, EmptyState, ErrorBoundary, Panel, SectionError, SectionHead, Skel, SkeletonRows, cx, useNow } from "./components/ui.jsx";
+import { Chips, Crest, EmptyState, ErrorBoundary, Panel, SectionError, SectionHead, Skel, SkeletonRows, SourceGate, cx, useNow } from "./components/ui.jsx";
 import { BriefingList, FanTalk, FeaturedSkeleton, FeaturedStory, NewsPage, StoryListSkeleton, StoryRow } from "./components/news.jsx";
 import { FormStrip, MatchCentrePage, MatchDetailPage, MatchList, NextMatchHero, StandingsTable } from "./components/matches.jsx";
 import { AvailabilityList, PlayerAvatar, PlayerProfilePage, SquadPage } from "./components/squad.jsx";
@@ -55,10 +55,15 @@ function parseHash() {
 
 function useRoute() {
   const [route, setRoute] = useState(parseHash);
+  const prev = useRef(route);
   useEffect(() => {
     const on = () => {
-      setRoute(parseHash());
-      window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+      const next = parseHash();
+      // Switching a tab (a query change on the same page) shouldn't throw the reader back to the top.
+      const samePage = next.page === prev.current.page && next.parts.join("/") === prev.current.parts.join("/");
+      prev.current = next;
+      setRoute(next);
+      if (!samePage) window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
     };
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
@@ -419,7 +424,38 @@ function YourHub({ saved, recents }) {
   );
 }
 
-function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs, saved, recents }) {
+const HOME_TABS = [
+  { id: "today", label: "Today" },
+  { id: "transfers", label: "Transfers" },
+  { id: "fixtures", label: "Fixtures" },
+  { id: "table", label: "Table" },
+];
+
+/** One line on availability; the full list lives on the Squad page. */
+function InjuryLine({ source, onRetry }) {
+  return (
+    <SourceGate source={source} onRetry={onRetry} skeleton={<Skel className="h-10 w-full rounded-xl" />}>
+      {({ players }) => {
+        const out = players.filter((p) => p.availability.key !== "available");
+        return (
+          <a href="#/squad" className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-[13px] hover:bg-surface-2">
+            <span className="min-w-0">
+              <span className="font-semibold text-ink">Availability: </span>
+              <span className="text-ink-muted">
+                {out.length
+                  ? out.slice(0, 4).map((p) => `${p.name} (${p.availability.label.toLowerCase()})`).join(", ") + (out.length > 4 ? ` +${out.length - 4} more` : "")
+                  : "ESPN’s roster feed lists nobody injured, suspended or doubtful. It can lag club news."}
+              </span>
+            </span>
+            <span className="shrink-0 text-xs font-semibold text-accent">Squad →</span>
+          </a>
+        );
+      }}
+    </SourceGate>
+  );
+}
+
+function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs, saved, recents, tab, setTab }) {
   const now = useNow();
   const arsenal = stories.filter((x) => x.scope === "arsenal");
   const briefing = useMemo(() => pickBriefing(stories, now), [stories]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -438,8 +474,9 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs, sav
   const matchNews = today ? arsenal.filter((x) => x.categories.has("match") && x.date && now - x.date < 30 * 3600e3).slice(0, 3) : [];
   const fanDown = (s.arsenalNews.data?.feeds ?? []).filter((f) => ["arseblog", "reddit"].includes(f.id)).every((f) => !f.ok);
 
+  const tabs = HOME_TABS;
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
         <p className="eyebrow text-accent">{fmtLongDay(new Date(now))}</p>
         <h1 className="text-2xl text-ink sm:text-3xl">{today ? "It’s matchday" : "Your Arsenal briefing"}</h1>
@@ -450,67 +487,84 @@ function HomePage({ s, load, stories, transfers, bookmarks, prefs, setPrefs, sav
         <AtAGlance s={s} load={load} />
       </div>
 
-      {matchNews.length > 0 && (
-        <section>
-          <SectionHead eyebrow="Matchday" title="Build-up & team news" href="#/news?cat=match" />
-          <Panel className="divide-y divide-line px-4">
-            {matchNews.map((st) => <StoryRow key={st.id} story={st} bookmarks={bookmarks} now={now} dense />)}
-          </Panel>
+      <div className="sticky top-[59px] z-20 -mx-4 bg-page/95 px-4 py-1.5 backdrop-blur">
+        <Chips options={tabs} value={tab} onChange={setTab} />
+      </div>
+
+      {tab === "today" && (
+        <div role="tabpanel" aria-label="Today" className="space-y-8">
+          {matchNews.length > 0 && (
+            <section>
+              <SectionHead eyebrow="Matchday" title="Build-up & team news" href="#/news?cat=match" />
+              <Panel className="divide-y divide-line px-4">
+                {matchNews.map((st) => <StoryRow key={st.id} story={st} bookmarks={bookmarks} now={now} dense />)}
+              </Panel>
+            </section>
+          )}
+
+          <section>
+            {newsLoading ? <FeaturedSkeleton /> : featured ? <FeaturedStory story={featured} bookmarks={bookmarks} now={now} rankLabel={briefing.length > 1 ? `1 of ${briefing.length}` : undefined} />
+              : s.arsenalNews.status === "error" ? <Panel><SectionError what="news" error={s.arsenalNews.error} onRetry={() => load("arsenalNews")} /></Panel> : null}
+            {briefing.length > 1 && (
+              <div className="mt-4">
+                <SectionHead eyebrow="Daily briefing" title={`The top ${briefing.length} stories`} />
+                <Panel className="px-4"><BriefingList stories={briefing} bookmarks={bookmarks} now={now} skipFirst /></Panel>
+                <p className="mt-1.5 text-[11px] text-ink-muted">The most important Arsenal stories of the last two days, ranked by recency, source reliability and how many outlets cover them. Summaries are the outlets’ own descriptions.</p>
+              </div>
+            )}
+          </section>
+
+          <InjuryLine source={s.roster} onRetry={() => load("roster")} />
+
+          <div className="grid gap-8 lg:grid-cols-3">
+            <section className="lg:col-span-2">
+              <SectionHead title="Latest" href="#/news" linkLabel="All news" />
+              <Chips options={HOME_FILTERS} value={homeCat} onChange={(v) => setPrefs((p) => ({ ...p, homeCategory: v }))} className="mb-1" />
+              <div className="divide-y divide-line">
+                {newsLoading ? <StoryListSkeleton rows={5} /> : latest.length ? latest.map((st) => <StoryRow key={st.id} story={st} bookmarks={bookmarks} now={now} />)
+                  : s.arsenalNews.status === "error" && !s.arsenalNews.data ? <SectionError what="news" error={s.arsenalNews.error} onRetry={() => load("arsenalNews")} /> : <EmptyState>No stories in this category right now.</EmptyState>}
+              </div>
+            </section>
+
+            <aside className="space-y-8">
+              <section>
+                <SectionHead title="Fan talk" />
+                <Panel className="overflow-hidden"><FanTalk stories={fan} unavailable={fanDown && !newsLoading} now={now} /></Panel>
+                <p className="mt-1.5 text-[11px] text-ink-muted">Opinion from fan sites, not reporting.</p>
+              </section>
+              <YourHub saved={saved} recents={recents} />
+            </aside>
+          </div>
+        </div>
+      )}
+
+      {tab === "transfers" && (
+        <section role="tabpanel" aria-label="Transfers">
+          <SectionHead title="Transfer watch" href="#/transfers" linkLabel="Full tracker" />
+          <Panel className="overflow-hidden"><TransferWatch entries={transfers} limit={8} unavailable={s.arsenalNews.status === "error" && !s.arsenalNews.data} loading={newsLoading} onRetry={() => load("arsenalNews")} /></Panel>
+          <p className="mt-1.5 text-[11px] text-ink-muted">Built from news reports only. The step shows how far the reporting has got, not a club announcement unless it says Confirmed.</p>
         </section>
       )}
 
-      <section>
-        {newsLoading ? <FeaturedSkeleton /> : featured ? <FeaturedStory story={featured} bookmarks={bookmarks} now={now} />
-          : s.arsenalNews.status === "error" ? <Panel><SectionError what="news" error={s.arsenalNews.error} onRetry={() => load("arsenalNews")} /></Panel> : null}
-        {briefing.length > 1 && (
-          <div className="mt-4">
-            <SectionHead eyebrow="Daily briefing" title="Five things to know" />
-            <Panel className="px-4"><BriefingList stories={briefing} bookmarks={bookmarks} now={now} skipFirst /></Panel>
-            <p className="mt-1.5 text-[11px] text-ink-muted">The most important Arsenal stories of the last two days, ranked by recency, source reliability and how many outlets cover them. Summaries are the outlets’ own descriptions.</p>
-          </div>
-        )}
-      </section>
-
-      <div className="grid gap-8 lg:grid-cols-3">
-        <section className="lg:col-span-2">
-          <SectionHead title="Latest" href="#/news" linkLabel="All news" />
-          <Chips options={HOME_FILTERS} value={homeCat} onChange={(v) => setPrefs((p) => ({ ...p, homeCategory: v }))} className="mb-1" />
-          <div className="divide-y divide-line">
-            {newsLoading ? <StoryListSkeleton rows={5} /> : latest.length ? latest.map((st) => <StoryRow key={st.id} story={st} bookmarks={bookmarks} now={now} />)
-              : s.arsenalNews.status === "error" && !s.arsenalNews.data ? <SectionError what="news" error={s.arsenalNews.error} onRetry={() => load("arsenalNews")} /> : <EmptyState>No stories in this category right now.</EmptyState>}
-          </div>
-        </section>
-
-        <aside className="space-y-8">
-          <section>
-            <SectionHead title="Transfer watch" href="#/transfers" />
-            <Panel className="overflow-hidden"><TransferWatch entries={transfers} unavailable={s.arsenalNews.status === "error" && !s.arsenalNews.data} loading={newsLoading} onRetry={() => load("arsenalNews")} /></Panel>
-          </section>
+      {tab === "fixtures" && (
+        <div role="tabpanel" aria-label="Fixtures" className="grid gap-8 lg:grid-cols-2">
           <section>
             <SectionHead title="Upcoming" href="#/matches" linkLabel="All fixtures" />
-            <Panel className="overflow-hidden"><MatchList matches={fixtures.slice(0, 3)} dense empty={s.schedule.status === "error" && !s.schedule.data ? <SectionError what="fixtures" error={s.schedule.error} onRetry={() => load("schedule")} /> : s.schedule.data ? "No fixtures announced." : <SkeletonRows rows={2} />} /></Panel>
+            <Panel className="overflow-hidden"><MatchList matches={fixtures.slice(0, 5)} dense empty={s.schedule.status === "error" && !s.schedule.data ? <SectionError what="fixtures" error={s.schedule.error} onRetry={() => load("schedule")} /> : s.schedule.data ? "No fixtures announced." : <SkeletonRows rows={3} />} /></Panel>
           </section>
           <section>
             <SectionHead title="Recent results" href="#/matches" />
-            <Panel className="overflow-hidden"><MatchList matches={results.filter((m) => !m.friendly).slice(0, 3)} dense empty={s.schedule.status === "error" && !s.schedule.data ? <SectionError what="results" error={s.schedule.error} onRetry={() => load("schedule")} /> : s.schedule.data ? "No results yet." : <SkeletonRows rows={2} />} /></Panel>
+            <Panel className="overflow-hidden"><MatchList matches={results.filter((m) => !m.friendly).slice(0, 5)} dense empty={s.schedule.status === "error" && !s.schedule.data ? <SectionError what="results" error={s.schedule.error} onRetry={() => load("schedule")} /> : s.schedule.data ? "No results yet." : <SkeletonRows rows={3} />} /></Panel>
           </section>
-          <section>
-            <SectionHead title="Premier League" href="#/matches" linkLabel="Full table" />
-            <Panel className="overflow-hidden"><StandingsTable source={s.standings} onRetry={() => load("standings")} /></Panel>
-          </section>
-          <section>
-            <SectionHead title="Injuries & doubts" href="#/squad" linkLabel="Squad" />
-            <Panel className="overflow-hidden"><AvailabilityList source={s.roster} limit={5} onRetry={() => load("roster")} /></Panel>
-            <p className="mt-1.5 text-[11px] text-ink-muted">From ESPN injury reports, which can lag club updates.</p>
-          </section>
-          <section>
-            <SectionHead title="Fan talk" />
-            <Panel className="overflow-hidden"><FanTalk stories={fan} unavailable={fanDown && !newsLoading} now={now} /></Panel>
-            <p className="mt-1.5 text-[11px] text-ink-muted">Opinion from fan sites, not reporting.</p>
-          </section>
-          <YourHub saved={saved} recents={recents} />
-        </aside>
-      </div>
+        </div>
+      )}
+
+      {tab === "table" && (
+        <section role="tabpanel" aria-label="Table">
+          <SectionHead title="Premier League" href="#/matches" linkLabel="Match centre" />
+          <Panel className="overflow-hidden"><StandingsTable source={s.standings} onRetry={() => load("standings")} mode="full" /></Panel>
+        </section>
+      )}
     </div>
   );
 }
@@ -625,7 +679,9 @@ export default function App() {
       page = <HistoryPage tab={route.parts[0]} prefs={prefs} setPrefs={setPrefs} />;
       break;
     default:
-      page = <HomePage s={s} load={load} stories={stories} transfers={transfers} bookmarks={bookmarks} prefs={prefs} setPrefs={setPrefs} saved={saved} recents={recents} />;
+      page = <HomePage s={s} load={load} stories={stories} transfers={transfers} bookmarks={bookmarks} prefs={prefs} setPrefs={setPrefs} saved={saved} recents={recents}
+        tab={HOME_TABS.some((t) => t.id === route.query.get("tab")) ? route.query.get("tab") : "today"}
+        setTab={(t) => { window.location.hash = t === "today" ? "#/" : `#/?tab=${t}`; }} />;
   }
 
   return (

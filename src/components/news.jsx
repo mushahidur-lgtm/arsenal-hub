@@ -3,24 +3,35 @@ import { Bookmark, BookmarkCheck, ChevronDown, ExternalLink, Layers, PlayCircle,
 import { CATEGORIES, CATEGORY_SHORT, SORTS, freshness, inCategory, storyHaystack, storyMentions } from "../lib/news.js";
 import { TIERS } from "../lib/sources.js";
 import { fmtFull, timeAgo } from "../lib/format.js";
+import { BadgeCheck, CircleHelp, MessageSquare, ShieldCheck } from "lucide-react";
 import { Chips, EmptyState, ErrorState, Panel, Select, Skel, StaleBanner, Thumb, cx, useNow } from "./ui.jsx";
 
 /* ───────────────────────── Badges ───────────────────────── */
 
 const TIER_STYLE = {
   official: "bg-brand text-white",
-  journalist: "bg-navy text-white dark:bg-sky-500/20 dark:text-sky-200",
-  reliable: "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-  secondary: "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-200",
-  speculation: "bg-orange-50 text-orange-800 ring-1 ring-inset ring-orange-600/20 dark:bg-orange-500/10 dark:text-orange-200",
-  opinion: "bg-surface-2 text-ink-muted ring-1 ring-inset ring-line",
+  journalist: "bg-navy text-white dark:bg-sky-700 dark:text-white",
+  reliable: "bg-emerald-700 text-white",
+  secondary: "bg-amber-700 text-white",
+  speculation: "bg-orange-700 text-white",
+  opinion: "bg-surface-2 text-ink ring-1 ring-inset ring-ink-muted/50",
+};
+
+const TIER_ICON = {
+  official: <BadgeCheck size={11} aria-hidden />,
+  journalist: <BadgeCheck size={11} aria-hidden />,
+  reliable: <ShieldCheck size={11} aria-hidden />,
+  secondary: <CircleHelp size={11} aria-hidden />,
+  speculation: <CircleHelp size={11} aria-hidden />,
+  opinion: <MessageSquare size={11} aria-hidden />,
 };
 
 export function TierBadge({ tier, className }) {
   const t = TIERS[tier];
   if (!t) return null;
   return (
-    <span title={t.label} className={cx("inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold", TIER_STYLE[tier], className)}>
+    <span title={t.label} className={cx("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold", TIER_STYLE[tier], className)}>
+      {TIER_ICON[tier]}
       {t.short}
     </span>
   );
@@ -163,25 +174,26 @@ export function StoryRow({ story, bookmarks, now, showImage = true, dense }) {
 }
 
 /** Today's top story: the lead of the daily briefing. */
-export function FeaturedStory({ story, bookmarks, now }) {
+export function FeaturedStory({ story, bookmarks, now, rankLabel }) {
   const [open, setOpen] = useState(false);
   const [noImage, setNoImage] = useState(false);
   if (!story) return null;
   const a = story.lead;
-  const showImage = story.image && !noImage;
+  // Same layout with or without a picture: a missing image shows the neutral placeholder, not a different card.
+  const showImage = true;
   return (
     <article className="fade-up overflow-hidden rounded-2xl border border-line bg-surface">
       <div className={cx("grid", showImage && "md:grid-cols-5")}>
         {showImage && (
           <a href={a.link} target="_blank" rel="noopener noreferrer" className="block md:col-span-3" tabIndex={-1} aria-hidden>
-            <Thumb src={story.image} priority onBroken={() => setNoImage(true)} className="aspect-[16/9] h-full w-full md:aspect-auto md:min-h-[300px]">
+            <Thumb src={noImage ? null : story.image} priority onBroken={() => setNoImage(true)} className="aspect-[16/9] h-full w-full md:aspect-auto md:min-h-[300px]">
               {story.imageCredit && <ImageCredit source={story.imageCredit} />}
             </Thumb>
           </a>
         )}
         <div className={cx("flex flex-col gap-3 p-5 md:p-6", showImage ? "md:col-span-2" : "border-l-4 border-brand")}>
           <div className="flex items-center justify-between gap-2">
-            <p className="eyebrow text-accent">Top story · {CATEGORY_SHORT[story.primary] ?? "News"}</p>
+            <p className="eyebrow text-accent">{rankLabel ? `${rankLabel} · ` : ""}Top story · {CATEGORY_SHORT[story.primary] ?? "News"}</p>
             <BookmarkButton article={a} bookmarks={bookmarks} className="-mr-2 -mt-1" />
           </div>
           <a href={a.link} target="_blank" rel="noopener noreferrer" className="group">

@@ -3,6 +3,8 @@ import {
   Activity, ArrowLeft, CalendarDays, Goal, MapPin, RefreshCw, Shield, ShieldCheck, Star, Target, Trophy,
 } from "lucide-react";
 import { TEAM_ID, WOMEN_ID, fetchMatchSummary } from "../lib/data.js";
+import { tableGaps } from "../lib/standings.js";
+import { heroMode, keyEvents, talkingPoints } from "../lib/hero.js";
 import { LineupPanel, MatchReport, PredictionBox } from "./pitch.jsx";
 import { TeamSwitch } from "./squad.jsx";
 import { fmtDay, fmtFull, fmtKick, fmtLongDay, fmtTime, ordinal, relDay, sameDay, signed, timeAgo, tzShort, userTz } from "../lib/format.js";
@@ -80,9 +82,111 @@ function HeroSide({ side, isArsenal }) {
   );
 }
 
+/** Match summary for the hero; re-checked every minute while the match is in play. */
+function useHeroSummary(match) {
+  const [state, setState] = useState({ data: null, error: null, loading: false, at: null });
+  useEffect(() => {
+    if (!match) { setState({ data: null, error: null, loading: false, at: null }); return undefined; }
+    let cancelled = false;
+    const run = () => fetchMatchSummary(match)
+      .then((data) => !cancelled && setState({ data, error: null, loading: false, at: new Date() }))
+      .catch((err) => !cancelled && setState((s) => ({ ...s, error: err.message, loading: false })));
+    setState((s) => ({ ...s, loading: true }));
+    run();
+    const id = match.state === "in" ? setInterval(run, 60e3) : null;
+    return () => { cancelled = true; if (id) clearInterval(id); };
+  }, [match?.id, match?.state]); // eslint-disable-line react-hooks/exhaustive-deps
+  return state;
+}
+
+const EVENT_LABEL = { goal: "Goal", penalty: "Penalty goal", "own-goal": "Own goal", yellow: "Yellow card", red: "Red card" };
+
+function KeyEvents({ match, summary }) {
+  if (summary.loading && !summary.data) return <div className="mx-auto mt-4 w-full max-w-md space-y-2"><div className="h-3 w-2/3 animate-pulse rounded bg-white/15" /><div className="h-3 w-1/2 animate-pulse rounded bg-white/10" /></div>;
+  if (summary.error && !summary.data) return <p className="mt-4 text-center text-[12px] text-white/70">Match events couldn’t be loaded right now.</p>;
+  const events = keyEvents(summary.data, 5);
+  if (!events.length) return <p className="mt-4 text-center text-[12px] text-white/70">No goals or cards reported yet.</p>;
+  return (
+    <div className="mx-auto mt-4 w-full max-w-md">
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/60">Key events</p>
+      <ul className="divide-y divide-white/10 rounded-xl bg-white/5 text-[13px]">
+        {events.map((e) => (
+          <li key={e.id ?? `${e.kind}${e.minute}${e.primary}`} className="flex items-center gap-3 px-3 py-2">
+            <span className="w-9 shrink-0 font-semibold tabular-nums text-white">{e.minute}</span>
+            <span className="min-w-0 flex-1 truncate"><span className="font-semibold">{EVENT_LABEL[e.kind]}</span> · {e.primary ?? "Unnamed player"}</span>
+            <span className="shrink-0 text-[11px] text-white/70">{e.teamId === match.home.id ? match.home.short : match.away.short}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Hero while a match is in play, and for the rest of the day after full time. */
+function MatchdayHero({ match, mode, summary, source }) {
+  const live = mode === "live";
+  return (
+    <HeroShell className="p-5 sm:p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-widest">
+        {live ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand px-2.5 py-1">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> Live · {match.clock || match.statusDetail}
+          </span>
+        ) : (
+          <span className="rounded-full bg-white px-2.5 py-1 text-neutral-900">Full time</span>
+        )}
+        <span className="rounded-full bg-white/10 px-2.5 py-1">{match.competition}</span>
+        <span className="rounded-full bg-white/10 px-2.5 py-1">{match.isHome ? "Home" : "Away"}</span>
+      </div>
+      <div className="mx-auto flex max-w-md items-center gap-2">
+        <HeroSide side={match.home} isArsenal={match.home?.id === TEAM_ID} />
+        <div className="flex shrink-0 flex-col items-center gap-1 px-1">
+          <span className="font-display text-4xl font-bold tabular-nums sm:text-5xl" aria-label={`Score ${match.home.score ?? 0} to ${match.away.score ?? 0}`}>{match.home.score ?? 0}–{match.away.score ?? 0}</span>
+          {!live && match.result && <ResultPill r={match.result} className="h-6 w-6 text-xs" />}
+        </div>
+        <HeroSide side={match.away} isArsenal={match.away?.id === TEAM_ID} />
+      </div>
+      <KeyEvents match={match} summary={summary} />
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        <a href={`#/matches/${match.id}`} className="inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-crimson max-lg:min-h-11">
+          <Shield size={13} /> {live ? "Lineups & live match centre" : "Lineups & full report"}
+        </a>
+      </div>
+      <p className="mt-3 text-center text-[11px] text-white/60">
+        {live
+          ? `Score from ESPN, re-checked every minute${summary.at ? ` · last checked ${fmtTime(summary.at)}` : ""}. Not a live stream; it can lag the real match.`
+          : `Result from ESPN${source.savedAt ? `, checked ${fmtTime(source.savedAt)}` : ""}.`}
+      </p>
+    </HeroShell>
+  );
+}
+
+/** Post-match card: facts only, each line built from the match summary. */
+export function TalkingPoints({ match, summary }) {
+  const points = talkingPoints(summary.data, match);
+  if (summary.loading && !summary.data) return <Panel className="p-4"><SkeletonRows rows={3} avatar={false} /></Panel>;
+  if (!points.length) return null;
+  return (
+    <Panel className="p-4">
+      <p className="eyebrow mb-2 text-accent">Talking points</p>
+      <dl className="space-y-2 text-[13px]">
+        {points.map((p) => (
+          <div key={p.id} className="grid grid-cols-[6.5rem_1fr] gap-2">
+            <dt className="font-semibold text-ink">{p.label}</dt>
+            <dd className="text-ink-muted">{p.text}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-2 text-[11px] text-ink-muted">Facts from ESPN’s match data. <a href={`#/matches/${match.id}`} className="font-semibold text-accent hover:underline">Full match report</a></p>
+    </Panel>
+  );
+}
+
 /** The next match, prominent but compact. Matchday-aware. */
 export function NextMatchHero({ source, onRetry }) {
   const now = useNow(30000);
+  const hm = heroMode(source.data, now);
+  const summary = useHeroSummary(hm.match);
   if (!source.data) {
     if (source.status === "error")
       return <HeroShell><div className="[&_p]:text-white/80"><ErrorState message={source.error} onRetry={onRetry} title="Couldn’t load fixtures" /></div></HeroShell>;
@@ -94,6 +198,14 @@ export function NextMatchHero({ source, onRetry }) {
           <div className="h-10 w-56 animate-pulse rounded bg-white/10" />
         </div>
       </HeroShell>
+    );
+  }
+  if (hm.mode !== "upcoming") {
+    return (
+      <div className="space-y-3">
+        <MatchdayHero match={hm.match} mode={hm.mode} summary={summary} source={source} />
+        {hm.mode === "fulltime" && <TalkingPoints match={hm.match} summary={summary} />}
+      </div>
     );
   }
   const { next, last } = pickNext(source.data);
@@ -231,6 +343,29 @@ export function FormStrip({ results, n = 5, size = "h-7 w-7 text-xs" }) {
 
 const RIVALS = new Set(["367", "363", "360", "382", "364"]); // Spurs, Chelsea, Man Utd, Man City, Liverpool
 
+/** Points gap to 2nd place and to the top-four line, from the table itself. */
+function GapSummary({ rows, teamId }) {
+  const g = tableGaps(rows, teamId);
+  if (g.second == null && g.topFour == null) return null;
+  const pts = (n) => `${Math.abs(n)} pt${Math.abs(n) === 1 ? "" : "s"}`;
+  return (
+    <dl className="grid grid-cols-2 gap-px border-t border-line bg-line text-[12px]">
+      {g.second != null && (
+        <div className="bg-surface px-3 py-2">
+          <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">vs 2nd place</dt>
+          <dd className="font-semibold text-ink">{g.second > 0 ? `${pts(g.second)} clear` : g.second < 0 ? `${pts(g.second)} behind` : "Level on points"}</dd>
+        </div>
+      )}
+      {g.topFour != null && (
+        <div className="bg-surface px-3 py-2">
+          <dt className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Top-4 cut-off</dt>
+          <dd className="font-semibold text-ink">{g.inside ? (g.topFour > 0 ? `${pts(g.topFour)} above 5th` : "Level with 5th") : g.topFour < 0 ? `${pts(g.topFour)} below 4th` : "Level with 4th"}</dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
 export function StandingsTable({ source, onRetry, mode = "around", teamId = TEAM_ID }) {
   const [full, setFull] = useState(mode === "full");
   return (
@@ -285,6 +420,7 @@ export function StandingsTable({ source, onRetry, mode = "around", teamId = TEAM
                 })}
               </tbody>
             </table>
+            <GapSummary rows={rows} teamId={teamId} />
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-3 py-2 text-[11px] text-ink-muted">
               <span>{season}</span>
               {mode !== "full" && (

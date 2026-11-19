@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown, Eye, EyeOff, FileSignature, Info, Newspaper } from "lucide-react";
-import { DIRECTIONS, STATUSES, subjectKey, timelineOf, windowInfo } from "../lib/transfers.js";
+import { loadPlayerPhoto } from "../lib/playerstats.js";
+import { DIRECTIONS, STATUSES, STEPS, stepOf, subjectKey, timelineOf, windowInfo } from "../lib/transfers.js";
 import { fmtDay, fmtFull, timeAgo } from "../lib/format.js";
 import { Chips, EmptyState, Panel, SectionError, SectionHead, Skel, SkeletonRows, Thumb, cx, useNow } from "./ui.jsx";
 import { TierBadge } from "./news.jsx";
@@ -21,6 +22,41 @@ export function StatusBadge({ status, className }) {
       {s.label}
     </span>
   );
+}
+
+/** Rumour → Talks → Agreed → Complete. Position comes from the status; the badge says exactly how firm it is. */
+export function Stepper({ status, className }) {
+  const at = stepOf(status);
+  if (at == null) return <p className={cx("text-[11px] text-ink-muted", className)}>Dismissed: no longer being reported as live</p>;
+  return (
+    <ol className={cx("flex items-center", className)} aria-label={`Stage: ${STEPS[at]}, step ${at + 1} of ${STEPS.length}`}>
+      {STEPS.map((label, i) => (
+        <li key={label} className="flex min-w-0 flex-1 items-center last:flex-none" aria-current={i === at ? "step" : undefined}>
+          <span className="flex flex-col items-start gap-0.5">
+            <span className={cx("h-2.5 w-2.5 rounded-full border-2", i < at ? "border-brand bg-brand" : i === at ? "border-brand bg-surface ring-2 ring-brand/30" : "border-line bg-surface")} />
+            <span className={cx("text-[9px] font-semibold uppercase tracking-wide", i === at ? "text-accent" : i < at ? "text-ink" : "text-ink-muted")}>{label}</span>
+          </span>
+          {i < STEPS.length - 1 && <span className={cx("mx-1 mb-3 h-0.5 flex-1 rounded", i < at ? "bg-brand" : "bg-line")} />}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * Headshot when one exists: ESPN's, or for current squad members a Wikipedia photo that has been
+ * matched on name *and* birth year. Rumoured targets keep initials, because a namesake photo would
+ * be worse than none.
+ */
+function TransferAvatar({ p, className }) {
+  const [wiki, setWiki] = useState(null);
+  useEffect(() => {
+    if (p.photo || !p.inSquad) return undefined;
+    let off = false;
+    loadPlayerPhoto(p.name, p.dob).then((r) => !off && setWiki(r?.src ?? null)).catch(() => {});
+    return () => { off = true; };
+  }, [p.name, p.photo, p.inSquad]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <PlayerAvatar p={{ ...p, photo: p.photo ?? wiki }} className={className} />;
 }
 
 const DIR_ICON = {
@@ -390,7 +426,7 @@ export function TransferWatch({ entries, limit = 4, unavailable, loading, onRetr
       {top.map((e) => (
         <li key={e.id}>
           <a href="#/transfers" className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface-2">
-            {e.player ? <PlayerAvatar p={e.player} className="h-9 w-9" /> : <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-2">{DIR_ICON[e.direction]}</span>}
+            {e.player ? <TransferAvatar p={e.player} className="h-10 w-10" /> : <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-2">{DIR_ICON[e.direction]}</span>}
             <div className="min-w-0 flex-1">
               <p className={cx("text-[13px] font-semibold text-ink", e.player ? "truncate" : "line-clamp-2 leading-snug")}>{e.player?.name ?? e.headline}</p>
               <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-ink-muted">
@@ -398,6 +434,7 @@ export function TransferWatch({ entries, limit = 4, unavailable, loading, onRetr
                 <span className="inline-flex shrink-0 items-center gap-0.5">{DIR_ICON[e.direction]} {DIRECTIONS[e.direction]}</span>
                 <span className="truncate">· {e.outlets[0]}{e.outlets.length > 1 ? ` +${e.outlets.length - 1}` : ""}</span>
               </div>
+              <Stepper status={e.status} className="mt-2" />
             </div>
           </a>
         </li>
