@@ -272,14 +272,16 @@ export function sameStory(a, b) {
   const gap = Math.abs((a.date?.getTime() ?? 0) - (b.date?.getTime() ?? 0));
   if (gap > 72 * HOUR) return false;
 
+  // If both name different squad players, they're different stories, however alike the
+  // headlines read ("Saka injury worry" vs "Odegaard injury worry" share most tokens).
+  const samePlayer = intersects(a.players, b.players);
+  if (a.players.size && b.players.size && !samePlayer) return false;
+
   const titleSim = jaccard(a.tokens, b.tokens);
   if (titleSim >= 0.5) return true;
 
   // Same subject: a known squad player, or a shared capitalised name.
-  const samePlayer = intersects(a.players, b.players);
   const sharedNames = sharedCount(a.entities, b.entities);
-  // If both name different squad players, they're different stories.
-  if (a.players.size && b.players.size && !samePlayer) return false;
   if (!samePlayer && sharedNames === 0) return false;
 
   // Same kind of event, judged on the headlines.

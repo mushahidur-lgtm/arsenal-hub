@@ -76,8 +76,9 @@ async function fetchOnce(url, timeoutMs, as = "json") {
 }
 
 /** Fetch with no caching; retry through a CORS proxy on network/CORS failure. */
-async function fetchRaw(url, { timeoutMs = 12000, proxy = true, as = "json" } = {}) {
+async function fetchRaw(url, { timeoutMs = 12000, proxy = true, as = "json", skipDirect = false } = {}) {
   try {
+    if (skipDirect) throw new FetchError("Direct request already failed", "network");
     return await fetchOnce(url, timeoutMs, as);
   } catch (err) {
     if (!proxy || (err.kind !== "network" && err.kind !== "timeout")) throw err;
@@ -120,11 +121,12 @@ const MAX_RAW_ITEMS = 25;
  */
 export async function fetchFeed(outletId, scope = "arsenal") {
   const url = OUTLETS[outletId].feed;
+  let directFailed = false;
   if (OUTLETS[outletId].cors) {
     try {
       const xml = await fetchJSON(url, { as: "text", timeoutMs: 8000, proxy: false });
       return { items: parseRssXml(xml, outletId, scope).slice(0, MAX_RAW_ITEMS), via: "direct" };
-    } catch { /* fall through to rss2json */ }
+    } catch { directFailed = true; /* fall through to rss2json */ }
   }
   try {
     const json = await fetchJSON(rss2json(url), { proxy: false });
@@ -132,7 +134,8 @@ export async function fetchFeed(outletId, scope = "arsenal") {
     return { items: parseRss2Json(json, outletId, scope), via: "rss2json" };
   } catch (first) {
     try {
-      const xml = await fetchJSON(url, { as: "text", timeoutMs: 8000 });
+      // Don't repeat a direct request that has just failed; only the proxy chain is left to try.
+      const xml = await fetchJSON(url, { as: "text", timeoutMs: 8000, skipDirect: directFailed });
       return { items: parseRssXml(xml, outletId, scope).slice(0, MAX_RAW_ITEMS), via: "direct" };
     } catch {
       throw new FetchError(/rate|short period/i.test(first.message) ? "Rate limited" : first.message, first.kind);
@@ -145,6 +148,7 @@ export async function fetchFeed(outletId, scope = "arsenal") {
 export const num = (v) => {
   if (v == null) return null;
   if (typeof v === "object") v = v.value ?? v.displayValue;
+  if (typeof v === "string" && v.trim() === "") return null; // "" would otherwise read as 0
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
@@ -221,7 +225,15 @@ export function parseEvent(e, teamId = TEAM_ID) {
 
 export function parseSchedules(jsons, teamId = TEAM_ID) {
   const byId = new Map();
-  for (const j of jsons) for (const e of j?.events ?? []) byId.set(e.id, parseEvent(e, teamId));
+  for (const j of jsons) {
+    for (const e of j?.events ?? []) {
+      const m = parseEvent(e, teamId);
+      // An event with no usable kick-off time can't be placed on a calendar, and an Invalid Date
+      // would be cached as null and crash date maths on the next visit. Skip it.
+      if (Number.isNaN(m.date.getTime())) continue;
+      byId.set(e.id, m);
+    }
+  }
   const all = [...byId.values()];
   const results = all.filter((m) => m.state === "post" && !m.postponed).sort((a, b) => b.date - a.date);
   const fixtures = all.filter((m) => m.state !== "post").sort((a, b) => a.date - b.date);
@@ -235,11 +247,11 @@ function availabilityOf(athlete) {
   const updated = inj?.date ? new Date(inj.date) : null;
   const base = { source: "ESPN injury report", updated: updated && !Number.isNaN(updated.getTime()) ? updated : null };
   if (inj) {
-    if (/suspend/.test(raw)) return { ...base, key: "suspended", label: "Suspended" };
+    if (/suspen[ds]/.test(raw)) return { ...base, key: "suspended", label: "Suspended" };
     if (/questionable|doubt|day-to-day|probable/.test(raw)) return { ...base, key: "doubtful", label: "Doubtful", detail: inj.details?.type || inj.status };
     return { ...base, key: "injured", label: "Injured", detail: inj.details?.type || inj.status || "Injury" };
   }
-  if (athlete.suspended || /suspend/i.test(athlete.status?.name ?? "")) return { key: "suspended", label: "Suspended", source: "ESPN" };
+  if (athlete.suspended || /suspen[ds]/i.test(athlete.status?.name ?? "")) return { key: "suspended", label: "Suspended", source: "ESPN" };
   return { key: "available", label: "Available", source: "ESPN: no injury listed" };
 }
 
@@ -536,12 +548,31 @@ const CACHE_MAX_AGE = 3 * 86400e3; // older than this is not worth showing at al
 const DATE_KEYS = new Set(["date", "updated", "savedAt", "dob"]);
 const revive = (k, v) => (DATE_KEYS.has(k) && typeof v === "string" ? new Date(v) : v);
 
+const validDate = (d) => d instanceof Date && !Number.isNaN(d.getTime());
+
+/**
+ * Cached data crosses a JSON round trip (and possibly an older version of the app), so check it
+ * before it reaches the UI: anything that would later throw on `match.date.getTime()` is dropped.
+ */
+function sanitizeSchedule(data) {
+  if (!data || !Array.isArray(data.fixtures) || !Array.isArray(data.results)) return null;
+  const ok = (m) => m && typeof m === "object" && validDate(m.date);
+  return { ...data, fixtures: data.fixtures.filter(ok), results: data.results.filter(ok) };
+}
+const CACHE_CHECKS = { schedule: sanitizeSchedule, womenSchedule: sanitizeSchedule };
+
 function readCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw, revive);
-    return Object.fromEntries(Object.entries(parsed).filter(([, v]) => v?.savedAt && Date.now() - v.savedAt.getTime() < CACHE_MAX_AGE));
+    const out = {};
+    for (const [key, v] of Object.entries(parsed ?? {})) {
+      if (!validDate(v?.savedAt) || Date.now() - v.savedAt.getTime() >= CACHE_MAX_AGE) continue;
+      const data = CACHE_CHECKS[key] ? CACHE_CHECKS[key](v.data) : v.data;
+      if (data != null) out[key] = { ...v, data };
+    }
+    return out;
   } catch {
     return {};
   }

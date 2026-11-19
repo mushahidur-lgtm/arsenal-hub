@@ -6,3 +6,8 @@ npm-debug.log*
 
 # local preview config for Claude Code
 .claude/launch.json
+
+# test output
+playwright-report/
+test-results/
+coverage/

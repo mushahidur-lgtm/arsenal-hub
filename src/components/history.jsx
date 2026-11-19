@@ -26,6 +26,7 @@ function Timeline({ prefs, setPrefs, focus }) {
   const events = TIMELINE.filter((e) => (cat === "all" || e.cat === cat) && (decade === "all" || Math.floor(e.year / 10) * 10 === Number(decade)));
   return (
     <div className="space-y-4">
+      <h2 className="sr-only">Timeline</h2>
       <Chips options={CATEGORIES.map((c) => ({ ...c, count: c.id === "all" ? TIMELINE.length : TIMELINE.filter((e) => e.cat === c.id).length }))} value={cat} onChange={(v) => setPrefs((p) => ({ ...p, historyCat: v }))} />
       <Select value={decade} onChange={setDecade} label="Decade" options={[{ id: "all", label: "All years" }, ...decades.map((d) => ({ id: String(d), label: `${d}s` }))]} />
       {events.length ? (
@@ -139,6 +140,8 @@ function Records() {
 
 function Eras() {
   return (
+    <div>
+      <h2 className="sr-only">Managers and eras</h2>
     <ol className="space-y-3">
       {ERAS.map((e) => (
         <li key={e.name}>
@@ -152,6 +155,7 @@ function Eras() {
         </li>
       ))}
     </ol>
+    </div>
   );
 }
 
