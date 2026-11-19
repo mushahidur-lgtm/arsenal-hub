@@ -75,16 +75,26 @@ async function fetchOnce(url, timeoutMs, as = "json") {
   }
 }
 
-/** Fetch with no caching; retry through a CORS proxy on network/CORS failure. */
-async function fetchRaw(url, { timeoutMs = 12000, proxy = true, as = "json", skipDirect = false } = {}) {
+/** Longest a single logical request may take, direct attempt and proxy fallbacks together. */
+export const OVERALL_TIMEOUT_MS = 5000;
+
+/**
+ * Fetch with no caching; retry through a CORS proxy on network/CORS failure. The direct attempt and
+ * the proxies share one overall time budget so a dead proxy chain can never hold a section in its
+ * loading state for more than about five seconds.
+ */
+async function fetchRaw(url, { timeoutMs = 12000, proxy = true, as = "json", skipDirect = false, overallMs = OVERALL_TIMEOUT_MS } = {}) {
+  const started = Date.now();
   try {
     if (skipDirect) throw new FetchError("Direct request already failed", "network");
-    return await fetchOnce(url, timeoutMs, as);
+    return await fetchOnce(url, Math.min(timeoutMs, overallMs), as);
   } catch (err) {
     if (!proxy || (err.kind !== "network" && err.kind !== "timeout")) throw err;
     for (const wrap of CORS_PROXIES) {
+      const left = overallMs - (Date.now() - started);
+      if (left < 300) break;
       try {
-        return await fetchOnce(wrap(url), 9000, as);
+        return await fetchOnce(wrap(url), left, as);
       } catch { /* try next proxy */ }
     }
     throw new FetchError(`${err.message}; CORS proxies also unavailable`, err.kind);

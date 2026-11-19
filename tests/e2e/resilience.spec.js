@@ -91,10 +91,59 @@ test.describe("errors are explained, not silent, and nothing is invented", () =>
   });
 });
 
+test.describe("failed data is never presented as fresh or as zero", () => {
+  test("roster failing with no cache shows the error state, no counts and no 'fetched' label", async ({ app: page, net }) => {
+    net.override(SOURCES.roster, () => respond(500));
+    await page.goto("./#/squad");
+    await settled(page);
+    const text = await mainText(page);
+    expect(text).toMatch(/Couldn.t load/);
+    expect(text).not.toMatch(/fetched|Injured\s*0|ESPN.s roster feed lists no/i);
+    await page.goto("./");
+    await settled(page);
+    await expect(page.getByText(/lists no injured/i)).toHaveCount(0);
+    await expect(page.getByText(/Couldn.t load/).first()).toBeVisible();
+  });
+
+  test("only the optional team-summary request failing (the CORS error in the console) does not mark the squad as stale", async ({ app: page }) => {
+    // /teams/359 is optional enrichment; the squad itself comes from /teams/359/roster.
+    await page.goto("./#/squad");
+    await settled(page);
+    await expect(page.getByText(/fetched just now/i)).toBeVisible();
+  });
+
+  test("a cached roster whose refresh fails says how old it is, never 'just now'", async ({ app: page, net }) => {
+    await page.goto("./#/squad");
+    await settled(page);
+    await page.evaluate(() => {
+      const all = JSON.parse(localStorage.getItem("afc-cache-v2"));
+      all.roster.savedAt = new Date(Date.now() - 5 * 3600e3).toISOString();
+      localStorage.setItem("afc-cache-v2", JSON.stringify(all));
+    });
+    net.override(SOURCES.roster, () => respond(500));
+    await page.reload();
+    await settled(page);
+    const text = await mainText(page);
+    expect(text).toMatch(/Refresh failed\. Last updated 5h ago/);
+    expect(text).toMatch(/fetched 5h ago/);
+    expect(text).not.toMatch(/fetched just now/);
+  });
+
+  test("home page sections each offer Retry when their source fails", async ({ app: page, net }) => {
+    net.override(SOURCES.schedule, () => respond(500));
+    net.override(SOURCES.standings, () => respond(500));
+    await page.goto("./");
+    await settled(page);
+    for (const what of ["the table", "fixtures", "results"]) await expect(page.getByText(`Couldn’t load ${what}`).first()).toBeVisible();
+    expect(await page.getByRole("button", { name: /retry/i }).count()).toBeGreaterThanOrEqual(3);
+    await expect(page.getByText(/^Loading…$/)).toHaveCount(0);
+  });
+});
+
 test.describe("loading and slow sources", () => {
   test("a slow source doesn't block the others, and shows a loading state meanwhile", async ({ app: page, net }) => {
     net.override(SOURCES.standings, async () => {
-      await new Promise((r) => setTimeout(r, 6000));
+      await new Promise((r) => setTimeout(r, 3000));
       return null;
     });
     await page.goto("./");

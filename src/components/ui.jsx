@@ -101,13 +101,33 @@ export function EmptyState({ children }) {
   return <p className="px-4 py-8 text-center text-sm text-ink-muted">{children}</p>;
 }
 
-/** Shown when a refresh failed but older data is still on screen. */
+/** "Couldn’t load <section> — Retry", compact enough to sit inside any card. */
+export function SectionError({ what, error, onRetry }) {
+  return <ErrorState compact title={`Couldn’t load ${what}`} message={error} onRetry={onRetry} />;
+}
+
+/** Cached data older than this is labelled with its age even while a refresh is running. */
+const STALE_LABEL_AFTER_MS = 2 * 60e3;
+
+/**
+ * Shown when older (cached) data is on screen: either a refresh failed, or the saved copy is
+ * still being shown while a refresh runs. Always says how old the data is.
+ */
 export function StaleBanner({ source, onRetry }) {
+  const age = source.savedAt ? Date.now() - new Date(source.savedAt).getTime() : null;
+  const showing = source.data && (source.status === "cached" || source.status === "refreshing");
+  if (showing && age != null && age > STALE_LABEL_AFTER_MS) {
+    return (
+      <p className="flex items-center gap-1.5 text-[11px] text-ink-muted" role="status">
+        <RefreshCw size={11} className="shrink-0" /> Last updated {timeAgo(new Date(source.savedAt))} · refreshing…
+      </p>
+    );
+  }
   if (source.status !== "error" || !source.data) return null;
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
       <span className="flex items-center gap-1.5">
-        <AlertTriangle size={12} className="shrink-0" /> Refresh failed. Showing data from {source.savedAt ? timeAgo(source.savedAt) : "earlier"}.
+        <AlertTriangle size={12} className="shrink-0" /> Refresh failed. Last updated {source.savedAt ? timeAgo(new Date(source.savedAt)) : "earlier"}.
       </span>
       {onRetry && <button onClick={onRetry} className="font-semibold underline">Retry</button>}
     </div>
@@ -217,7 +237,7 @@ export function Chips({ options, value, onChange, className, size = "sm" }) {
             aria-selected={active}
             onClick={() => onChange(o.id)}
             className={cx(
-              "shrink-0 whitespace-nowrap rounded-full border font-semibold transition",
+              "shrink-0 whitespace-nowrap rounded-full border font-semibold transition max-lg:min-h-11",
               size === "sm" ? "px-3 py-1.5 text-xs" : "px-3.5 py-2 text-sm",
               active ? "border-brand bg-brand text-white" : "border-line bg-surface text-ink-muted hover:text-ink"
             )}
@@ -240,7 +260,7 @@ export function Select({ value, onChange, options, label, ariaLabel, className }
         aria-label={ariaLabel ?? label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink focus:outline-none"
+        className="rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-ink focus:outline-none max-lg:min-h-11"
       >
         {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
       </select>

@@ -43,7 +43,7 @@ export function SaveStar({ player, team = "men", saved, className }) {
       aria-pressed={on}
       aria-label={on ? `Stop following ${player.name}` : `Follow ${player.name}`}
       title={on ? "Following" : "Follow player"}
-      className={cx("grid h-8 w-8 shrink-0 place-items-center rounded-full transition hover:bg-surface-2", on ? "text-amber-500" : "text-ink-muted", className)}
+      className={cx("hit grid h-8 w-8 shrink-0 place-items-center rounded-full transition hover:bg-surface-2", on ? "text-amber-500" : "text-ink-muted", className)}
     >
       <Star size={16} fill={on ? "currentColor" : "none"} />
     </button>
@@ -107,13 +107,13 @@ export function AvailabilityOverview({ source, team }) {
 }
 
 /** Compact injury & availability list (homepage + squad page). */
-export function AvailabilityList({ source, limit, team }) {
+export function AvailabilityList({ source, limit, team, onRetry }) {
   const q = team === "women" ? "?team=women" : "";
   return (
-    <SourceGate source={source} skeleton={<SkeletonRows rows={3} />}>
+    <SourceGate source={source} onRetry={onRetry} skeleton={<SkeletonRows rows={3} />}>
       {({ players }) => {
         const out = players.filter((p) => p.availability.key !== "available");
-        if (!out.length) return <EmptyState>ESPN lists no injured, suspended or doubtful players.</EmptyState>;
+        if (!out.length) return <EmptyState>ESPN’s roster feed lists no injured, suspended or doubtful players. It can lag club announcements.</EmptyState>;
         return (
           <ul className="divide-y divide-line">
             {out.slice(0, limit).map((p) => (
@@ -184,7 +184,7 @@ export function TeamSwitch({ team, hrefFor }) {
     <div className="inline-flex rounded-full border border-line bg-surface p-0.5 text-xs font-semibold" role="tablist" aria-label="Team">
       {[["men", "Men’s"], ["women", "Women’s"]].map(([id, label]) => (
         <a key={id} href={hrefFor(id)} role="tab" aria-selected={team === id}
-          className={cx("rounded-full px-3.5 py-1.5 transition", team === id ? "bg-brand text-white" : "text-ink-muted hover:text-ink")}>
+          className={cx("hit rounded-full px-3.5 py-1.5 transition", team === id ? "bg-brand text-white" : "text-ink-muted hover:text-ink")}>
           {label}
         </a>
       ))}
