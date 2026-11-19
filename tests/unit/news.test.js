@@ -171,8 +171,11 @@ describe("feed parsing", () => {
     expect(items[0].excerpt).toBe("Great win");
     expect(items[0].source).toBe("BBC Sport");
   });
-  it.each([null, undefined, {}, { items: null }, { items: [] }])("parseRss2Json(%j) returns an empty list", (input) => {
-    expect(parseRss2Json(input, "bbc")).toEqual([]);
+  it.each([null, undefined, {}, { items: null }, { items: "x" }])("parseRss2Json(%j) reports an unexpected structure", (input) => {
+    expect(() => parseRss2Json(input, "bbc")).toThrow(/Unexpected response format/);
+  });
+  it("an empty items array is a valid, empty feed", () => {
+    expect(parseRss2Json({ items: [] }, "bbc")).toEqual([]);
   });
   it("gives null for unparseable or missing publication dates", () => {
     expect(parseDate("not a date")).toBeNull();
@@ -201,8 +204,9 @@ describe("feed parsing", () => {
   it("parses ESPN news and tolerates missing fields", () => {
     const items = parseEspnNews({ articles: [{ id: 1, headline: "H", links: { web: { href: "https://espn.test/1" } }, published: "2025-01-10T08:30:00Z" }, { headline: "No link" }] });
     expect(items[0]).toMatchObject({ title: "H", link: "https://espn.test/1", source: "ESPN" });
-    expect(items[1].link).toBeUndefined();
-    expect(parseEspnNews(null)).toEqual([]);
+    expect(items).toHaveLength(1); // an article with no web link can't be linked to, so it is skipped
+    expect(() => parseEspnNews(null)).toThrow(/Unexpected response format/);
+    expect(parseEspnNews({ articles: [] })).toEqual([]);
   });
   it("decodes entities and strips HTML", () => {
     expect(decode("Ben White&rsquo;s &amp; &#163;50m &#x2014;")).toBe("Ben White’s & £50m —");

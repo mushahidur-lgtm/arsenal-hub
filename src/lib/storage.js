@@ -136,3 +136,19 @@ export function useRecents() {
   const clear = useCallback(() => setRecents([]), [setRecents]);
   return { recents, push, clear };
 }
+
+/**
+ * Adds `value` to a keyed cache object and keeps at most `max` entries, dropping the oldest first
+ * (by each entry's `at` timestamp). Keeps localStorage from growing without bound.
+ */
+export function boundedPut(cache, key, value, max) {
+  cache[key] = value;
+  const keys = Object.keys(cache);
+  if (keys.length <= max) return cache;
+  keys
+    .filter((k) => k !== key)
+    .sort((a, b) => (cache[a]?.at ?? 0) - (cache[b]?.at ?? 0))
+    .slice(0, keys.length - max)
+    .forEach((k) => delete cache[k]);
+  return cache;
+}

@@ -7,10 +7,14 @@
  * passes, tackles or interceptions, so none of those are ever shown.
  */
 import { TEAM_ID, URLS, competitionOf, fetchJSON, isFriendlySlug } from "./data.js";
-import { readJSON, writeJSON } from "./storage.js";
+import { boundedPut, readJSON, writeJSON } from "./storage.js";
+import { FetchError } from "./errors.js";
+import { arr, isObj } from "./validate.js";
 
 const KEY = "afc-pstats-v1";
 const TTL = 6 * 3600e3;
+const PSTATS_MAX = 40; // players whose statistics are kept on this device (oldest dropped first)
+const PHOTO_MAX = 150;
 
 const seasonLabel = (season) => {
   const m = String(season?.displayName ?? "").match(/^\d{4}(?:-\d{2,4})?/);
@@ -19,18 +23,23 @@ const seasonLabel = (season) => {
 
 /** ESPN athlete /stats response → { seasons: { [label]: { [ABBR]: number } }, labels } */
 export function parsePlayerStats(json) {
+  // An empty/absent body just means "no statistics"; any other non-object is a malformed response.
+  if (json != null && !isObj(json)) throw new FetchError("Unexpected response format (player statistics)", "data");
   const out = {};
   const labels = {};
-  for (const cat of json?.categories ?? []) {
-    (cat.names ?? []).forEach((abbr, i) => {
+  for (const cat of arr(json?.categories).filter(isObj)) {
+    const names = arr(cat.names);
+    names.forEach((abbr, i) => {
       labels[abbr] = { name: cat.displayNames?.[i] ?? abbr, desc: cat.descriptions?.[i] ?? "", group: cat.displayName };
     });
-    for (const row of cat.statistics ?? []) {
+    for (const row of arr(cat.statistics).filter(isObj)) {
       const season = seasonLabel(row.season);
       if (!season) continue;
       out[season] ??= { _year: row.season?.year ?? 0 };
-      (cat.names ?? []).forEach((abbr, i) => {
-        const v = Number(row.stats?.[i]);
+      names.forEach((abbr, i) => {
+        // A missing or non-numeric value stays absent: it is never turned into 0.
+        const raw = arr(row.stats)[i];
+        const v = raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "") ? NaN : Number(raw);
         if (Number.isFinite(v)) out[season][abbr] = v;
       });
     }
@@ -48,12 +57,12 @@ export async function loadPlayerStats(id, teamId = TEAM_ID) {
   const cacheKey = `${id}@${teamId}`;
   const cache = readJSON(KEY, {});
   const hit = cache[cacheKey];
-  if (hit && Date.now() - hit.at < TTL) return { ...hit.v, fetchedAt: new Date(hit.at) };
+  if (isObj(hit) && isObj(hit.v) && Number.isFinite(hit.at) && Date.now() - hit.at < TTL) return { ...hit.v, fetchedAt: new Date(hit.at) };
 
   const first = await fetchJSON(URLS.playerStats(id, teamId));
-  const leagueFilter = (first?.filters ?? []).find((f) => f.name === "league");
+  const leagueFilter = arr(first?.filters).find((f) => isObj(f) && f.name === "league");
   const defaultLeague = leagueFilter?.value;
-  const options = (leagueFilter?.options ?? []).filter(
+  const options = arr(leagueFilter?.options).filter(isObj).filter(
     (o) => !isFriendlySlug(o.value) && !/friendly|emirates_cup|community|charity/i.test(o.value)
   );
   const slugs = [...new Set([defaultLeague, ...options.map((o) => o.value)].filter(Boolean))];
@@ -80,7 +89,7 @@ export async function loadPlayerStats(id, teamId = TEAM_ID) {
     competitions.push({ slug: slugs[i], name: known.name === "Match" ? nameOf(slugs[i]) : known.name });
   });
   const value = { competitions, data, labels };
-  cache[cacheKey] = { at: Date.now(), v: value };
+  boundedPut(cache, cacheKey, { at: Date.now(), v: value }, PSTATS_MAX);
   writeJSON(KEY, cache);
   return { ...value, fetchedAt: new Date() };
 }
@@ -89,7 +98,7 @@ export async function loadPlayerStats(id, teamId = TEAM_ID) {
 export async function loadPlayerBio(id) {
   try {
     const j = await fetchJSON(URLS.playerBio(id), { proxy: false, timeoutMs: 8000 });
-    return (j?.teamHistory ?? []).map((t) => ({ name: t.displayName, seasons: t.seasons, logo: t.logo }));
+    return arr(j?.teamHistory).filter(isObj).map((t) => ({ name: t.displayName, seasons: t.seasons, logo: t.logo }));
   } catch {
     return [];
   }
@@ -113,13 +122,13 @@ export async function loadPlayerPhoto(name, dob) {
     try {
       const j = await fetchJSON(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}`, { proxy: false, timeoutMs: 8000 });
       if (j?.type !== "standard" || !/footballer|soccer/i.test(j.description ?? "") || !j.thumbnail?.source) continue;
-      const born = (j.description.match(/born (d{4})/) ?? [])[1];
+      const born = (j.description.match(/born (\d{4})/) ?? [])[1];
       if (year && born && Number(born) !== year) continue;
       found = { src: j.thumbnail.source, page: j.content_urls?.desktop?.page ?? null };
       break;
     } catch { /* try next title */ }
   }
-  cache[name] = { at: Date.now(), ...(found ?? {}) };
+  boundedPut(cache, name, { at: Date.now(), ...(found ?? {}) }, PHOTO_MAX);
   writeJSON(PHOTO_KEY, cache);
   return found;
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Activity, ArrowLeft, Goal, Hand, HeartPulse, Star, Target } from "lucide-react";
 import { TEAM_ID, WOMEN_ID } from "../lib/data.js";
+import { AVAILABILITY, isReportedAbsent, summarizeAvailability } from "../lib/availability.js";
 import { loadPlayerBio, loadPlayerPhoto, loadPlayerStats, seasonLine, seasonsOf } from "../lib/playerstats.js";
 import { storyMentions } from "../lib/news.js";
 import { fmtDate, fmtDay, fmtFull, timeAgo } from "../lib/format.js";
@@ -8,13 +9,13 @@ import { Chips, EmptyState, ErrorState, Panel, SectionHead, Select, Skel, Skelet
 import { StoryRow } from "./news.jsx";
 
 export const AVAIL_STYLE = {
-  available: { dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" },
+  clear: { dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" },
   doubtful: { dot: "bg-amber-500", chip: "bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300" },
   injured: { dot: "bg-brand", chip: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300" },
   suspended: { dot: "bg-purple-500", chip: "bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300" },
   unknown: { dot: "bg-zinc-400", chip: "bg-surface-2 text-ink-muted" },
 };
-const AVAIL_LABEL = { available: "Available", injured: "Injured", suspended: "Suspended", doubtful: "Doubtful", unknown: "Unknown" };
+const AVAIL_LABEL = Object.fromEntries(Object.entries(AVAILABILITY).map(([k, v]) => [k, v.label]));
 
 export const teamIdOf = (team) => (team === "women" ? WOMEN_ID : TEAM_ID);
 
@@ -66,7 +67,7 @@ function PlayerCard({ p, team, saved }) {
           {p.flag && <img src={p.flag} alt="" className="h-3 w-4 rounded-sm object-cover" loading="lazy" />}
           {[p.position, p.nationality, p.age ? `${p.age} yrs` : null].filter(Boolean).join(" · ")}
         </p>
-        {p.availability.key !== "available" && (
+        {p.availability.key !== "clear" && (
           <span className={cx("mt-1.5 inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[10px] font-semibold", a.chip)}>
             <span className={cx("h-1.5 w-1.5 shrink-0 rounded-full", a.dot)} />
             {p.availability.label}{p.availability.detail ? ` · ${p.availability.detail}` : ""}
@@ -78,7 +79,7 @@ function PlayerCard({ p, team, saved }) {
   );
 }
 
-const GROUPS = ["Goalkeepers", "Defenders", "Midfielders", "Forwards"];
+const GROUPS = ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Other"]; // "Other": ESPN gave no position
 
 /** Counts per availability state, with where the data comes from and when it was fetched. */
 export function AvailabilityOverview({ source, team }) {
@@ -89,7 +90,7 @@ export function AvailabilityOverview({ source, team }) {
   return (
     <div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {["available", "injured", "suspended", "doubtful", "unknown"].map((k) => (
+        {["clear", "injured", "suspended", "doubtful", "unknown"].map((k) => (
           <div key={k} className="rounded-xl border border-line bg-surface p-3">
             <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
               <span className={cx("h-1.5 w-1.5 rounded-full", AVAIL_STYLE[k].dot)} /> {AVAIL_LABEL[k]}
@@ -100,7 +101,7 @@ export function AvailabilityOverview({ source, team }) {
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-ink-muted">
         Source: ESPN injury reports for the {team === "women" ? "Women’s" : "Men’s"} squad, fetched {source.savedAt ? timeAgo(source.savedAt, now) : "recently"}.
-        “Unknown” means ESPN gave no status. Reports can lag club announcements, and no return dates are shown because none are reliably published.
+        “No injury reported” means ESPN’s list has no entry for the player, not that the club has confirmed fitness. “Unknown” means ESPN gave no usable injury data. Reports can lag club announcements, and no return dates are shown because none are reliably published.
       </p>
     </div>
   );
@@ -112,8 +113,9 @@ export function AvailabilityList({ source, limit, team, onRetry }) {
   return (
     <SourceGate source={source} onRetry={onRetry} skeleton={<SkeletonRows rows={3} />}>
       {({ players }) => {
-        const out = players.filter((p) => p.availability.key !== "available");
-        if (!out.length) return <EmptyState>ESPN’s roster feed lists no injured, suspended or doubtful players. It can lag club announcements.</EmptyState>;
+        const out = players.filter(isReportedAbsent);
+        const unknown = summarizeAvailability(players).counts.unknown;
+        if (!out.length) return <EmptyState>ESPN’s roster feed lists no injured, suspended or doubtful players{unknown ? `, and gives no injury data for ${unknown} player${unknown > 1 ? "s" : ""}` : ""}. It can lag club announcements.</EmptyState>;
         return (
           <ul className="divide-y divide-line">
             {out.slice(0, limit).map((p) => (
@@ -194,7 +196,7 @@ export function TeamSwitch({ team, hrefFor }) {
 
 export function SquadPage({ team, source, onRetry, injuryStories, bookmarks, now, prefs, setPrefs, saved }) {
   const pos = prefs.squadPos ?? "All";
-  const avail = prefs.squadAvail ?? "all";
+  const avail = prefs.squadAvail === "available" ? "clear" : prefs.squadAvail ?? "all"; // "available" was the pre-rename id saved in some browsers
   const set = (k) => (v) => setPrefs((p) => ({ ...p, [k]: v }));
   const womens = team === "women";
   return (
@@ -221,10 +223,10 @@ export function SquadPage({ team, source, onRetry, injuryStories, bookmarks, now
               return (
                 <>
                   <Chips value={pos} onChange={set("squadPos")}
-                    options={["All", ...GROUPS].map((g) => ({ id: g, label: g, count: g === "All" ? players.length : players.filter((p) => p.group === g).length }))} />
+                    options={["All", ...GROUPS].filter((g) => g !== "Other" || players.some((p) => p.group === "Other")).map((g) => ({ id: g, label: g, count: g === "All" ? players.length : players.filter((p) => p.group === g).length }))} />
                   <Chips value={avail} onChange={set("squadAvail")}
-                    options={[["all", "Any status"], ["available", "Available"], ["doubtful", "Doubtful"], ["injured", "Out"], ["suspended", "Suspended"]]
-                      .filter(([id]) => id === "all" || id === "available" || counts[id])
+                    options={[["all", "Any status"], ["clear", "None reported"], ["doubtful", "Doubtful"], ["injured", "Out"], ["suspended", "Suspended"], ["unknown", "Unknown"]]
+                      .filter(([id]) => id === "all" || id === "clear" || counts[id])
                       .map(([id, label]) => ({ id, label, count: id === "all" ? undefined : counts[id] ?? 0 }))} />
                   {groups.map((g) => {
                     const list = filtered.filter((p) => p.group === g);

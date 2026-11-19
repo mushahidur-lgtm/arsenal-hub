@@ -4,6 +4,9 @@
  *   { id, title, link, date: Date, updated: Date|null, image, excerpt, author, outlet, source, scope, video }
  */
 import { OUTLETS } from "./sources.js";
+import { FetchError } from "./errors.js";
+import { noteDropped } from "./diagnostics.js";
+import { arr, isObj, keepValid, str } from "./validate.js";
 
 const ENTITIES = {
   amp: "&", quot: '"', apos: "'", lt: "<", gt: ">", nbsp: " ", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“",
@@ -94,20 +97,24 @@ function normalize({ guid, title, link, pubDate, updated, description, content, 
   };
 }
 
-/** rss2json response → items */
+/** A feed item is usable only with a headline and a link to the original story. */
+const usable = (i) => isObj(i) && !!str(i.title) && !!str(i.link);
+
+/** rss2json response → items. Wrong structure throws; items without a title or link are skipped. */
 export function parseRss2Json(json, outletId, scope = "arsenal") {
-  return (json?.items ?? []).map((i) =>
+  if (!isObj(json) || !Array.isArray(json.items)) throw new FetchError("Unexpected response format (rss2json feed)", "data");
+  return keepValid(json.items, usable, "rss").map((i) =>
     normalize(
       {
-        guid: i.guid,
+        guid: str(i.guid),
         title: i.title,
         link: i.link,
         pubDate: i.pubDate,
-        description: i.description,
-        content: i.content,
-        thumbnail: i.thumbnail,
-        enclosure: i.enclosure?.link,
-        author: i.author,
+        description: str(i.description) ?? "",
+        content: str(i.content) ?? "",
+        thumbnail: str(i.thumbnail),
+        enclosure: isObj(i.enclosure) ? str(i.enclosure.link) : typeof i.enclosure === "string" ? i.enclosure : undefined,
+        author: str(i.author) ?? "",
       },
       outletId,
       scope
@@ -115,51 +122,58 @@ export function parseRss2Json(json, outletId, scope = "arsenal") {
   );
 }
 
-/** Raw RSS/Atom XML → items (browser only: uses DOMParser). */
+/** Raw RSS/Atom XML → items (browser only: uses DOMParser). Malformed XML or a non-feed document throws. */
 export function parseRssXml(xmlText, outletId, scope = "arsenal") {
+  if (typeof xmlText !== "string" || !xmlText.trim()) throw new FetchError("Feed was empty", "data");
   const doc = new DOMParser().parseFromString(xmlText, "text/xml");
-  if (doc.querySelector("parsererror")) throw new Error("Feed XML could not be parsed");
+  if (doc.querySelector("parsererror")) throw new FetchError("Feed XML could not be parsed", "data");
+  const root = doc.documentElement?.localName ?? "";
+  if (!/^(rss|feed|RDF)$/i.test(root)) throw new FetchError("Unexpected response format (not an RSS or Atom feed)", "data");
   const nodes = [...doc.querySelectorAll("item, entry")];
   const text = (el, sel) => el.querySelector(sel)?.textContent?.trim() ?? "";
   const byTag = (el, tag) => [...el.getElementsByTagName("*")].find((n) => n.tagName === tag || n.localName === tag.split(":").pop() && n.tagName.endsWith(tag));
-  return nodes.map((el) => {
+  const items = nodes.map((el) => {
     const linkEl = el.querySelector("link");
     const link = linkEl?.getAttribute("href") || linkEl?.textContent?.trim() || "";
     const media = byTag(el, "media:content") || byTag(el, "media:thumbnail");
     const encl = el.querySelector("enclosure");
-    return normalize(
-      {
-        guid: text(el, "guid") || text(el, "id") || link,
-        title: text(el, "title"),
-        link,
-        pubDate: text(el, "pubDate") || text(el, "published") || byTag(el, "dc:date")?.textContent,
-        updated: text(el, "updated"),
-        description: text(el, "description") || text(el, "summary"),
-        content: byTag(el, "content:encoded")?.textContent || text(el, "content"),
-        thumbnail: media?.getAttribute("url"),
-        enclosure: encl?.getAttribute("type")?.startsWith("image") ? encl.getAttribute("url") : null,
-        author: byTag(el, "dc:creator")?.textContent || text(el, "author name") || text(el, "author"),
-      },
-      outletId,
-      scope
-    );
+    return {
+      guid: text(el, "guid") || text(el, "id") || link,
+      title: text(el, "title"),
+      link,
+      pubDate: text(el, "pubDate") || text(el, "published") || byTag(el, "dc:date")?.textContent,
+      updated: text(el, "updated"),
+      description: text(el, "description") || text(el, "summary"),
+      content: byTag(el, "content:encoded")?.textContent || text(el, "content"),
+      thumbnail: media?.getAttribute("url"),
+      enclosure: encl?.getAttribute("type")?.startsWith("image") ? encl.getAttribute("url") : null,
+      author: byTag(el, "dc:creator")?.textContent || text(el, "author name") || text(el, "author"),
+    };
   });
+  return keepValid(items, usable, "rss").map((i) => normalize(i, outletId, scope));
 }
 
-/** ESPN news API → items */
+/** ESPN news API → items. Wrong structure throws; articles without a headline or web link are skipped. */
 export function parseEspnNews(json, scope = "arsenal") {
-  return (json?.articles ?? []).map((a) => ({
-    id: String(a.id ?? a.dataSourceIdentifier ?? a.headline),
-    title: a.headline,
-    link: a.links?.web?.href,
-    date: parseDate(a.published),
-    updated: parseDate(a.lastModified),
-    image: a.images?.[0]?.url ?? null,
-    excerpt: a.description && a.description !== a.headline ? a.description : "",
-    author: a.byline ?? "",
-    outlet: "espn",
-    source: "ESPN",
-    scope,
-    video: a.type === "Media",
-  }));
+  if (!isObj(json) || !Array.isArray(json.articles)) throw new FetchError("Unexpected response format (ESPN news)", "data");
+  return json.articles
+    .filter((a) => {
+      const ok = isObj(a) && !!str(a.headline) && !!str(a.links?.web?.href);
+      if (!ok) noteDropped("espn-news");
+      return ok;
+    })
+    .map((a) => ({
+      id: String(a.id ?? a.dataSourceIdentifier ?? a.headline),
+      title: a.headline,
+      link: a.links.web.href,
+      date: parseDate(a.published),
+      updated: parseDate(a.lastModified),
+      image: str(arr(a.images)[0]?.url),
+      excerpt: str(a.description) && a.description !== a.headline ? a.description : "",
+      author: str(a.byline) ?? "",
+      outlet: "espn",
+      source: "ESPN",
+      scope,
+      video: a.type === "Media",
+    }));
 }
