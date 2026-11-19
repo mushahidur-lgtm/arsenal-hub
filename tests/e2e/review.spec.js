@@ -158,7 +158,8 @@ test.describe("code-split pages fail gracefully", () => {
     let release;
     const gate = new Promise((r) => { release = r; });
     await page.route("**/assets/history-*.js", async (route) => { await gate; await route.continue(); });
-    await page.goto("./#/history");
+    // Firefox holds the window "load" event until the pending chunk arrives, so don't wait for it here.
+    await page.goto("./#/history", { waitUntil: "commit" });
     await expect(page.locator('[role="status"][aria-label="Loading page"]')).toBeVisible();
     release();
     await expect(page.getByRole("heading", { level: 1 })).toContainText("history");
