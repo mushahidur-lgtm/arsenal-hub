@@ -335,8 +335,7 @@ export function NewsPage({ stories, sources, load, bookmarks, prefs, setPrefs, q
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="eyebrow text-accent">News</p>
-            <h1 className="text-2xl text-ink sm:text-3xl">Arsenal news, de-duplicated</h1>
-            <p className="mt-1 text-sm text-ink-muted">One card per story, with every outlet that covered it. Labels show how reliable each source is.</p>
+            <h1 className="text-2xl text-ink sm:text-3xl">Arsenal news</h1>
           </div>
         </div>
         <Chips options={options} value={cat} onChange={set("newsCategory")} />
