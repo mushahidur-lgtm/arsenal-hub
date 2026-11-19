@@ -153,9 +153,15 @@ test.describe("code-split pages fail gracefully", () => {
   });
 
   test("while a page's code downloads, a loading placeholder is shown", async ({ app: page }) => {
-    await page.route("**/assets/history-*.js", async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
+    // The chunk request is held until the test releases it, so the placeholder state is observable
+    // deterministically instead of racing a timer.
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    await page.route("**/assets/history-*.js", async (route) => { await gate; await route.continue(); });
     await page.goto("./#/history");
-    await expect(page.getByRole("status", { name: "Loading page" })).toBeVisible();
+    await expect(page.locator('[role="status"][aria-label="Loading page"]')).toBeVisible();
+    release();
     await expect(page.getByRole("heading", { level: 1 })).toContainText("history");
+    await expect(page.locator('[role="status"][aria-label="Loading page"]')).toHaveCount(0);
   });
 });
