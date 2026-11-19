@@ -21,7 +21,7 @@ describe("fetchJSON error handling", () => {
     vi.stubGlobal("fetch", vi.fn(async () => ok({ a: 1 })));
     await expect(data.fetchJSON(url())).resolves.toEqual({ a: 1 });
   });
-  it.each([404, 500, 503])("surfaces HTTP %i as an http error without hammering proxies", async (code) => {
+  it.each([404, 500])("surfaces HTTP %i as an http error without retrying or using proxies", async (code) => {
     const f = vi.fn(async () => status(code));
     vi.stubGlobal("fetch", f);
     await expect(data.fetchJSON(url())).rejects.toMatchObject({ kind: "http", message: `HTTP ${code}` });

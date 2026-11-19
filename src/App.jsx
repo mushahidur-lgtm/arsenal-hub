@@ -20,6 +20,7 @@ import { Chips, Crest, EmptyState, ErrorBoundary, Panel, SectionError, SectionHe
 import { BriefingList, FanTalk, FeaturedSkeleton, FeaturedStory, NewsPage, StoryListSkeleton, StoryRow } from "./components/news.jsx";
 import { FormStrip, MatchCentrePage, MatchDetailPage, MatchList, NextMatchHero, StandingsTable } from "./components/matches.jsx";
 import { AvailabilityList, PlayerAvatar, PlayerProfilePage, SquadPage } from "./components/squad.jsx";
+import { isReportedAbsent, summarizeAvailability } from "./lib/availability.js";
 import { TransferWatch, TransfersPage } from "./components/transfers.jsx";
 import { ComparePage } from "./components/analysis.jsx";
 import { HistoryPage } from "./components/history.jsx";
@@ -436,7 +437,8 @@ function InjuryLine({ source, onRetry }) {
   return (
     <SourceGate source={source} onRetry={onRetry} skeleton={<Skel className="h-10 w-full rounded-xl" />}>
       {({ players }) => {
-        const out = players.filter((p) => p.availability.key !== "available");
+        const out = players.filter(isReportedAbsent);
+        const unknown = summarizeAvailability(players).counts.unknown;
         return (
           <a href="#/squad" className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-[13px] hover:bg-surface-2">
             <span className="min-w-0">
@@ -444,7 +446,7 @@ function InjuryLine({ source, onRetry }) {
               <span className="text-ink-muted">
                 {out.length
                   ? out.slice(0, 4).map((p) => `${p.name} (${p.availability.label.toLowerCase()})`).join(", ") + (out.length > 4 ? ` +${out.length - 4} more` : "")
-                  : "ESPN’s roster feed lists nobody injured, suspended or doubtful. It can lag club news."}
+                  : `ESPN’s roster feed lists nobody injured, suspended or doubtful${unknown ? `, and gives no injury data for ${unknown} player${unknown > 1 ? "s" : ""}` : ""}. It can lag club news.`}
               </span>
             </span>
             <span className="shrink-0 text-xs font-semibold text-accent">Squad →</span>

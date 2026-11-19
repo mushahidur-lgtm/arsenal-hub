@@ -65,8 +65,14 @@ describe("parseSchedules", () => {
     expect(fixtures).toHaveLength(1);
     expect(fixtures[0].postponed).toBe(true);
   });
-  it("tolerates empty, null and malformed responses", () => {
-    expect(parseSchedules([{}, null, undefined, { events: null }])).toEqual({ results: [], fixtures: [] });
+  it("accepts a valid but empty schedule, and ignores malformed siblings while one response is usable", () => {
+    expect(parseSchedules([{ events: [] }])).toEqual({ results: [], fixtures: [], dropped: 0 });
+    expect(parseSchedules([{}, null, undefined, { events: null }, { events: [] }])).toMatchObject({ results: [], fixtures: [] });
+  });
+  it("reports an unexpected structure instead of showing an empty schedule", () => {
+    for (const bad of [[{}, null, undefined, { events: null }], [], null, [{ events: "nope" }]]) {
+      expect(() => parseSchedules(bad), JSON.stringify(bad)).toThrow(/Unexpected response format/);
+    }
   });
   it("drops events whose date is missing or invalid so they cannot poison cached data", () => {
     const bad = espnEvent({ id: "bad", date: undefined, state: "pre" });
@@ -107,7 +113,9 @@ describe("parseRoster", () => {
     expect(players[0].dob).toBeNull();
     expect(players[0].height).toBeNull();
     expect(players[0].stats).toEqual({});
-    expect(players[0].availability.key).toBe("available");
+    // ESPN supplied no injury data for this player at all: that is "unknown", never "available".
+    expect(players[0].availability.key).toBe("unknown");
+    expect(parseRoster({ athletes: [athlete({ id: "y", injuries: [] })] }).players[0].availability.key).toBe("clear");
   });
   it("reads injuries and suspensions into availability", () => {
     const inj = parseRoster({ athletes: [athlete({ injuries: [{ status: "Out", details: { type: "Hamstring" } }] })] }).players[0];
@@ -117,9 +125,9 @@ describe("parseRoster", () => {
     const sus = parseRoster({ athletes: [athlete({ injuries: [{ status: "Suspension" }] })] }).players[0];
     expect(sus.availability.key).toBe("suspended");
   });
-  it("tolerates a missing athletes list and non-numeric stats", () => {
-    expect(parseRoster({}).players).toEqual([]);
-    expect(parseRoster(null).players).toEqual([]);
+  it("reports a missing athletes list instead of showing an empty squad, and tolerates non-numeric stats", () => {
+    for (const bad of [{}, null, "x", [], { athletes: "nope" }]) expect(() => parseRoster(bad)).toThrow(/Unexpected response format/);
+    expect(parseRoster({ athletes: [] }).players).toEqual([]);
     const p = parseRoster({ athletes: [athlete({ statistics: { splits: { categories: [{ stats: [{ name: "goals", value: "n/a" }, { name: "assists", value: 3 }] }] } } })] }).players[0];
     expect(p.stats).toEqual({ goals: null, assists: 3 });
   });
@@ -136,10 +144,9 @@ describe("parseStandings", () => {
     expect(rows[0].pts).toBe(25);
     expect(rows[0].gf).toBeUndefined();
   });
-  it("returns no rows for empty or unexpected responses", () => {
-    expect(parseStandings({}).rows).toEqual([]);
-    expect(parseStandings(null).rows).toEqual([]);
-    expect(parseStandings({ children: [] }).rows).toEqual([]);
+  it("reports unexpected structures; a valid but empty table has no rows", () => {
+    for (const bad of [{}, null, { children: [] }, { children: [{ standings: {} }] }]) expect(() => parseStandings(bad)).toThrow(/Unexpected response format/);
+    expect(parseStandings({ children: [{ standings: { entries: [] } }] }).rows).toEqual([]);
   });
 });
 

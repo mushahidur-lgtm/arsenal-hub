@@ -244,3 +244,18 @@ test.describe("request hygiene", () => {
     void allowed;
   });
 });
+
+test.describe("diagnostics", () => {
+  test("window.afcDiagnostics() reports cache and provider activity, including failed providers", async ({ app: page, net }) => {
+    net.override(SOURCES.standings, () => respond(500));
+    await page.goto("./");
+    await settled(page);
+    const d = await page.evaluate(() => window.afcDiagnostics());
+    expect(d.memo.size).toBeGreaterThan(0);
+    expect(d.memo.max).toBeGreaterThanOrEqual(d.memo.size);
+    const espn = d.providers["direct:site.web.api.espn.com"];
+    expect(espn.failures.http).toBeGreaterThanOrEqual(1);
+    expect(espn.lastError).toMatchObject({ kind: "http" }); // the newest failure on this host (standings 500, or another optional 404)
+    expect(Object.keys(d.persistentCache)).toEqual(expect.arrayContaining(["hits", "misses", "evicted", "expired"]));
+  });
+});
