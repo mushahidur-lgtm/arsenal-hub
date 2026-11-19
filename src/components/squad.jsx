@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useRefreshEpoch } from "../lib/refresh.js";
 import { Activity, ArrowLeft, Goal, Hand, HeartPulse, Star, Target } from "lucide-react";
 import { TEAM_ID, WOMEN_ID } from "../lib/data.js";
 import { AVAILABILITY, isReportedAbsent, summarizeAvailability } from "../lib/availability.js";
@@ -282,15 +283,19 @@ export const metricKeys = (keys) => [...keys].sort((a, b) => metricRank(a) - met
 /** Loads (and refreshes on id change) a player's season stats. */
 export function usePlayerStats(id, team) {
   const [state, setState] = useState({ status: "loading" });
+  const epoch = useRefreshEpoch();
+  const mountEpoch = useRef(epoch);
   useEffect(() => {
     if (!id) return undefined;
     let cancelled = false;
-    setState({ status: "loading" });
-    loadPlayerStats(id, teamIdOf(team))
+    // A data refresh since this page opened bypasses the 6-hour saved copy and the response cache.
+    const force = epoch !== mountEpoch.current;
+    setState((s) => (force && s.data ? { ...s, status: "ok" } : { status: "loading" }));
+    loadPlayerStats(id, teamIdOf(team), { force })
       .then((data) => !cancelled && setState({ status: "ok", data }))
       .catch((e) => !cancelled && setState({ status: "error", error: e.message }));
     return () => { cancelled = true; };
-  }, [id, team]);
+  }, [id, team, epoch]);
   return state;
 }
 

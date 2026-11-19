@@ -51,3 +51,45 @@ export function talkingPoints(summary, match) {
   else if (cards.length) out.push({ id: "yellows", label: "Bookings", text: `${cards.length} yellow card${cards.length > 1 ? "s" : ""}` });
   return out;
 }
+
+/* ───────────────────────── Match phase ───────────────────────── */
+
+/** A match is normally over ~2h after kick-off; beyond this a "pre" fixture is stale, not "about to start". */
+export const UNCONFIRMED_AFTER_MS = 3.5 * 3600e3;
+
+/**
+ * Where a match really is, from ESPN's state *and* the clock:
+ *   live            ESPN says in play
+ *   completed       ESPN says finished
+ *   postponed       postponed or cancelled
+ *   upcoming        kick-off still to come
+ *   kickoff-passed  kick-off was within the last 3.5h but ESPN hasn't reported it starting yet
+ *   unconfirmed     kick-off was long ago and ESPN still says "scheduled": the status is stale, so
+ *                   the match is neither shown as upcoming nor given an invented result
+ *   unknown         no usable date
+ */
+export function matchPhase(m, now = Date.now()) {
+  if (!m) return "unknown";
+  if (m.postponed) return "postponed";
+  if (m.state === "in") return "live";
+  if (m.state === "post") return "completed";
+  const t = m.date?.getTime?.();
+  if (!Number.isFinite(t)) return "unknown";
+  if (now < t) return "upcoming";
+  return now - t <= UNCONFIRMED_AFTER_MS ? "kickoff-passed" : "unconfirmed";
+}
+
+/**
+ * The match the hero should lead with, plus the last result, plus any fixtures whose status is stale.
+ * A stale fixture never blocks the real next match.
+ */
+export function pickNextMatch(data, now = Date.now()) {
+  if (!data) return { next: null, last: null, stale: [] };
+  const fixtures = data.fixtures ?? [];
+  const live = fixtures.find((m) => matchPhase(m, now) === "live");
+  const next = live ?? fixtures.find((m) => ["upcoming", "kickoff-passed"].includes(matchPhase(m, now))) ?? null;
+  const stale = fixtures.filter((m) => matchPhase(m, now) === "unconfirmed");
+  const results = data.results ?? [];
+  const last = results.find((m) => !m.friendly) ?? results[0] ?? null;
+  return { next, last, stale };
+}

@@ -20,6 +20,7 @@ import { OVERALL_TIMEOUT_MS, clearMemo, configureNet, fetchJSON, getNetDiagnosti
 import { parseRoster, parseSchedules, parseStandings, parseSummary, parseTeam } from "./parsers.js";
 import { persistentStats } from "./diagnostics.js";
 import { arr, isObj, str } from "./validate.js";
+import { bumpRefreshEpoch } from "./refresh.js";
 
 export { FetchError, OVERALL_TIMEOUT_MS, clearMemo, configureNet, fetchJSON };
 export { competitionOf, isFriendlySlug, logoOf, num, parseEvent, parseRoster, parseSchedules, parseStandings, parseSummary } from "./parsers.js";
@@ -84,8 +85,8 @@ export async function fetchFeed(outletId, scope = "arsenal") {
 
 /* ────────────────────────────── Match detail ────────────────────────────── */
 
-export async function fetchMatchSummary(match) {
-  const json = await fetchJSON(URLS.summary(match.leagueSlug, match.id));
+export async function fetchMatchSummary(match, { fresh = false } = {}) {
+  const json = await fetchJSON(URLS.summary(match.leagueSlug, match.id), { fresh });
   return parseSummary(json);
 }
 
@@ -370,7 +371,9 @@ export function useHubData() {
     load(key);
   }, [load]);
 
-  const refreshAll = useCallback(async () => {
+  // `initial` is the automatic refresh on page load: pages that were just opened already fetched their
+  // own detail data, so only later refreshes are broadcast to them (see refresh.js).
+  const refreshAll = useCallback(async ({ initial = false } = {}) => {
     setRefreshing(true);
     lastRefresh.current = Date.now();
     clearMemo();
@@ -378,7 +381,10 @@ export function useHubData() {
     keys.filter((k) => OPTIONAL_SOURCES.has(k)).forEach((k) => load(k, { force: true })); // fire and forget
     const results = await Promise.all(keys.filter((k) => !OPTIONAL_SOURCES.has(k)).map((k) => load(k, { force: true })));
     // "Last refreshed" means data actually arrived, not just that we tried.
-    if (results.some(Boolean)) setLastUpdated(new Date());
+    if (results.some(Boolean)) {
+      setLastUpdated(new Date());
+      if (!initial) bumpRefreshEpoch();
+    }
     setRefreshing(false);
   }, [load]);
 
@@ -388,7 +394,7 @@ export function useHubData() {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    refreshAll();
+    refreshAll({ initial: true });
   }, [refreshAll]);
 
   // Background refresh: every 10 min while visible, and on return to the tab.

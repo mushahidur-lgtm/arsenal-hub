@@ -53,13 +53,13 @@ export function parsePlayerStats(json) {
  * cups exist is hard-coded. Cached for 6h.
  * Returns { competitions: [{slug,name}], data: {slug: {season: {ABBR: n}}}, labels, fetchedAt }.
  */
-export async function loadPlayerStats(id, teamId = TEAM_ID) {
+export async function loadPlayerStats(id, teamId = TEAM_ID, { force = false } = {}) {
   const cacheKey = `${id}@${teamId}`;
   const cache = readJSON(KEY, {});
   const hit = cache[cacheKey];
-  if (isObj(hit) && isObj(hit.v) && Number.isFinite(hit.at) && Date.now() - hit.at < TTL) return { ...hit.v, fetchedAt: new Date(hit.at) };
+  if (!force && isObj(hit) && isObj(hit.v) && Number.isFinite(hit.at) && Date.now() - hit.at < TTL) return { ...hit.v, fetchedAt: new Date(hit.at) };
 
-  const first = await fetchJSON(URLS.playerStats(id, teamId));
+  const first = await fetchJSON(URLS.playerStats(id, teamId), { fresh: force });
   const leagueFilter = arr(first?.filters).find((f) => isObj(f) && f.name === "league");
   const defaultLeague = leagueFilter?.value;
   const options = arr(leagueFilter?.options).filter(isObj).filter(
@@ -72,7 +72,7 @@ export async function loadPlayerStats(id, teamId = TEAM_ID) {
   };
 
   const results = await Promise.allSettled(
-    slugs.map((slug) => (slug === defaultLeague ? Promise.resolve(first) : fetchJSON(URLS.playerStats(id, teamId, slug))))
+    slugs.map((slug) => (slug === defaultLeague ? Promise.resolve(first) : fetchJSON(URLS.playerStats(id, teamId, slug), { fresh: force })))
   );
   const data = {};
   const labels = {};
