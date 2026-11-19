@@ -11,3 +11,6 @@ npm-debug.log*
 playwright-report/
 test-results/
 coverage/
+
+# audit screenshots
+audit/

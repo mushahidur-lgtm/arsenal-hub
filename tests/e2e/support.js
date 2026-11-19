@@ -18,7 +18,7 @@ const file = (name, type = "application/json") => ({ status: 200, headers: { ...
 const fail = (status = 500) => json({ error: "mocked failure" }, status);
 
 /** Default replay of every external host the app talks to. `null` means "not handled here". */
-function defaultResponse(u, request) {
+export function defaultResponse(u, request) {
   const { hostname, pathname, searchParams } = u;
   const full = u.href;
 
