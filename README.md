@@ -11,6 +11,12 @@ A daily Arsenal platform built with React 18, Tailwind CSS v4 and lucide-react o
 
 Live site: **https://mushahidur-lgtm.github.io/arsenal-hub/**
 
+## Documentation
+
+📖 **[Arsenal Hub wiki](docs/wiki/README.md)**: features, architecture, data sources and APIs, local development, deployment, security notes and a [Claude Code prompt library](docs/wiki/09-claude-prompts/README.md).
+
+For current setup requirements and module layout, prefer the wiki over the sections below.
+
 ```
 src/
 ├── App.jsx                 shell: hash routing, header, bottom nav + More sheet, unified search, homepage

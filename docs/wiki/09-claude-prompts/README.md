@@ -12,7 +12,7 @@ Reusable, copy-ready prompts for future work on Arsenal Hub. These are **instruc
 
 Every prompt has the same structure (role, context, objective, scope, files to inspect, requirements, constraints, testing, deliverables, acceptance criteria) and carries the same safeguards, including no commit, push or deploy without approval.
 
-Historical prompts already used on this project are kept separately in the repository's `prompt/` folder if it has been committed.
+Historical prompts already used on this project are kept separately in the repository's [`prompt/`](../../../prompt/README.md) folder.
 
 ## [Project understanding](project-understanding.md)
 
